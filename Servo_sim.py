@@ -19,7 +19,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 import math
 
-#from c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
+from c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
 
 # Global variables Odometry Drone Condicion inicial
 x_real = 0.0
@@ -517,12 +517,12 @@ def main(vel_pub, vel_msg):
 
     solver_json = 'acados_ocp_' + model.name + '.json'
     
-    AcadosOcpSolver.generate(ocp, json_file=solver_json)
-    AcadosOcpSolver.build(ocp.code_export_directory, with_cython=True)
-    acados_ocp_solver = AcadosOcpSolver.create_cython_solver(solver_json)
+    #AcadosOcpSolver.generate(ocp, json_file=solver_json)
+    #AcadosOcpSolver.build(ocp.code_export_directory, with_cython=True)
+    #acados_ocp_solver = AcadosOcpSolver.create_cython_solver(solver_json)
     
     
-    #acados_ocp_solver = AcadosOcpSolverCython(ocp.model.name, ocp.solver_options.nlp_solver_type, ocp.dims.N)
+    acados_ocp_solver = AcadosOcpSolverCython(ocp.model.name, ocp.solver_options.nlp_solver_type, ocp.dims.N)
 
     nx = ocp.model.x.size()[0]
     nu = ocp.model.u.size()[0]
@@ -537,12 +537,10 @@ def main(vel_pub, vel_msg):
     headers = ["hx", "hy", "hz", "phi", "theta", "psi", "hx_p", "hy_p", "hz_p", "phi_p", "theta_p", "psi_p"]
 
    # Imprimir los encabezados
-    for header in headers:
-        print(f"{header: <8}", end="")
-    print()
+    
 
     # Lista para almacenar los valores anteriores
-    prev_values = [0] * 12
+
 
     for k in range(0, t.shape[0]-N_prediction):
         tic = time.time()
@@ -558,7 +556,7 @@ def main(vel_pub, vel_msg):
         xref[8,k:] = hdp_vision[2]
         xref[9,k:] = 0
         xref[10,k:] = 0
-        xref[11,k:] = hdp_vision[5]
+        xref[11,k:] = 0.5
         # Control Law Section
         acados_ocp_solver.set(0, "lbx", x[:,k])
         acados_ocp_solver.set(0, "ubx", x[:,k])
@@ -582,10 +580,15 @@ def main(vel_pub, vel_msg):
         send_velocity_control(u_control[:, k], vel_pub, vel_msg)
 
         #Imprime El vector de estados
+       
+        # Dentro del bucle
         state_vector = np.ravel(x[:, k])
+        max_header_length = max(len(header) for header in headers)
         for header, value in zip(headers, state_vector):
-            print(f"{header}: {value:.2f}")
-        print()  # Línea en blanco para separar las iteraciones
+            formatted_header = header.ljust(max_header_length)
+            print(f"{formatted_header}: {value:.2f}")
+        print()
+
 
         # System Evolution
         x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
@@ -601,6 +604,7 @@ def main(vel_pub, vel_msg):
                 None
         toc = time.time() - tic 
         #print(toc)
+        
     send_velocity_control([0, 0, 0, 0], vel_pub, vel_msg)
 
 

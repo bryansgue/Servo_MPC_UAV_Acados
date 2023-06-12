@@ -19,7 +19,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 import math
 
-#from c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
+from c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
 
 # Global variables Odometry Drone Condicion inicial
 x_real = 0.0
@@ -512,7 +512,7 @@ def main(vel_pub, vel_msg):
     model, f = f_system_model()
 
     ocp = create_ocp_solver_description(x[:,0], N_prediction, t_prediction, zp_ref_max, zp_ref_min, phi_max, phi_min, theta_max, theta_min)
-    acados_ocp_solver = AcadosOcpSolver(ocp, json_file="acados_ocp_" + ocp.model.name + ".json", build= True, generate= True)
+    #acados_ocp_solver = AcadosOcpSolver(ocp, json_file="acados_ocp_" + ocp.model.name + ".json", build= True, generate= True)
 
     solver_json = 'acados_ocp_' + model.name + '.json'
     
@@ -521,7 +521,7 @@ def main(vel_pub, vel_msg):
     #acados_ocp_solver = AcadosOcpSolver.create_cython_solver(solver_json)
     
     
-    #acados_ocp_solver = AcadosOcpSolverCython(ocp.model.name, ocp.solver_options.nlp_solver_type, ocp.dims.N)
+    acados_ocp_solver = AcadosOcpSolverCython(ocp.model.name, ocp.solver_options.nlp_solver_type, ocp.dims.N)
 
     nx = ocp.model.x.size()[0]
     nu = ocp.model.u.size()[0]
@@ -561,7 +561,6 @@ def main(vel_pub, vel_msg):
         xref[10,k:] = 0
         xref[11,k:] = hdp_vision[5]
         
-        print(xref[11,k])
         # Control Law Section
         acados_ocp_solver.set(0, "lbx", x[:,k])
         acados_ocp_solver.set(0, "ubx", x[:,k])
@@ -585,10 +584,13 @@ def main(vel_pub, vel_msg):
         send_velocity_control(u_control[:, k], vel_pub, vel_msg)
 
         #Imprime El vector de estados
-        #state_vector = np.ravel(x[:, k])
-        #for header, value in zip(headers, state_vector):
-        #    print(f"{header}: {value:.2f}")
-        #print()  # Línea en blanco para separar las iteraciones
+        
+        state_vector = np.ravel(x[:, k])
+        max_header_length = max(len(header) for header in headers)
+        for header, value in zip(headers, state_vector):
+            formatted_header = header.ljust(max_header_length)
+            print(f"{formatted_header}: {value:.2f}")
+        print()
 
         # System Evolution
         #x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
