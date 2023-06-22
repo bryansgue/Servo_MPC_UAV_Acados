@@ -17,14 +17,15 @@ import rospy
 from scipy.spatial.transform import Rotation as R
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
+from sensor_msgs.msg import Joy
 import math
 
-from c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
+#from c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
 
 # Global variables Odometry Drone Condicion inicial
 x_real = 0.0
 y_real = 0.0
-z_real = 3
+z_real = 0
 vx_real = 0.0
 vy_real = 0.0
 vz_real = 0.0
@@ -39,6 +40,7 @@ wy_real = 0.0
 wz_real = 0.0
 
 hdp_vision = [0,0,0,0,0,0]
+axes = [0,0,0,0,0,0]
 
 def odometry_call_back(odom_msg):
     global x_real, y_real, z_real, qx_real, qy_real, qz_real, qw_real, vx_real, vy_real, vz_real, wx_real, wy_real, wz_real
@@ -324,9 +326,9 @@ def visual_callback(msg):
     wz_visual = msg.angular.z
 
     hdp_vision = [vx_visual, vy_visual, vz_visual, wx_visual, wy_visual, wz_visual]
-    print(hdp_vision)
+    
 
-def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_max, phi_min, theta_max, theta_min, psi_max, psi_min) -> AcadosOcp:
+def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_max, phi_min, theta_max, theta_min) -> AcadosOcp:
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
 
@@ -340,8 +342,8 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
     ocp.dims.N = N_horizon
 
     # set cost
-    Q_mat = 1 * np.diag([0.0, 0.0, 0.0, 0, 0, 0, 0.5, 0.5, 0.5, 0.0, 0.0, 2])  # [x,th,dx,dth]
-    R_mat = 1 * np.diag([(1/zp_max),  (1/phi_max), (1/theta_max), 0.000001])
+    Q_mat = 1 * np.diag([0, 0, 0, 0, 0, 0, 0.2, 0.2, 0.2, 0.0, 0.0, 1000])  # [x,th,dx,dth]
+    R_mat = 0 * np.diag([(1/zp_max),  (1/phi_max), (1/theta_max), 0.15])
 
     ocp.cost.cost_type = "LINEAR_LS"
     ocp.cost.cost_type_e = "LINEAR_LS"
@@ -382,14 +384,26 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
 
     return ocp
 
+def Euler_p(omega, euler):
+    W = np.array([[1, np.sin(euler[0])*np.tan(euler[1]), np.cos(euler[0])*np.tan(euler[1])],
+                  [0, np.cos(euler[0]), np.sin(euler[0])],
+                  [0, np.sin(euler[0])/np.cos(euler[1]), np.cos(euler[0])/np.cos(euler[1])]])
+
+    euler_p = np.dot(W, omega)
+    return euler_p
+
+
 def get_odometry(pose, velocity):
     displacement = [pose[0,0], pose[0,1], pose[0,2]]
     quaternion = [pose[0,3], pose[0,4], pose[0,5], pose[0,6]]
     r_quat = R.from_quat(quaternion)
-    euler =  r_quat.as_euler('xyz', degrees = False)
+    euler =  r_quat.as_euler('zyx', degrees = False)
     linear_velocity = [velocity[0,0], velocity[0,1], velocity[0,2]]
     angular_velocity = [velocity[0,3], velocity[0,4], velocity[0,5]]
-    state = np.array([displacement[0], displacement[1], displacement[2], euler[0], euler[1], euler[2], linear_velocity[0], linear_velocity[1], linear_velocity[2], angular_velocity[0], angular_velocity[1], angular_velocity[2]])
+    euler_p = Euler_p(angular_velocity,[euler[2], euler[1], euler[0]])
+    state = np.array([displacement[0], displacement[1], displacement[2], euler[2], euler[1], euler[0], linear_velocity[0], linear_velocity[1], linear_velocity[2], euler_p[0], euler_p[1], euler_p[2]])
+    # Imprimir el vector euler_p con dos decimales
+    #print("[{:.2f}]".format(euler_p[2]))
     return state
 
 def send_velocity_control(u, vel_pub, vel_msg):
@@ -457,15 +471,29 @@ def send_state_to_topic(state_vector):
     publisher.publish(odometry_msg)
 
 
+def rc_callback(data):
+    # Extraer los datos individuales del mensaje
+    global axes
+    axes_aux = data.axes
+    psi = -np.pi / 2
+
+    R = np.array([[np.cos(psi), -np.sin(psi), 0, 0, 0, 0],
+                [np.sin(psi), np.cos(psi), 0, 0, 0, 0],
+                [0, 0, -1, 0, 0, 0],
+                [0, 0, 0, 1, 0, 0],
+                [0, 0, 0, 0, 1, 0],
+                [0, 0, 0, 0, 0, 1]])
+    axes = R@axes_aux
+
 
 def main(vel_pub, vel_msg):
     # Initial Values System
     # Simulation Time
-    t_final = 180
+    t_final = 60
     # Sample time
     t_s = 0.03
     # Prediction Time
-    t_prediction= 1;
+    t_prediction= 1
 
     # Nodes inside MPC
     N = np.arange(0, t_prediction + t_s, t_s)
@@ -480,9 +508,8 @@ def main(vel_pub, vel_msg):
 
 
     # Vector Initial conditions
-
-    xref = np.zeros((16, t.shape[0]), dtype = np.double)
     x = np.zeros((12, t.shape[0]+1-N_prediction), dtype = np.double)
+    xref = np.zeros((16, t.shape[0]), dtype = np.double)
     x_sim = np.zeros((12, t.shape[0]+1-N_prediction), dtype = np.double)
 
     # Read Values Odometry Drone
@@ -492,7 +519,7 @@ def main(vel_pub, vel_msg):
 
     # Read Real data
     x[:, 0] = get_odometry(data_pose, data_velocity)
-    print(x[:, 0])
+
 
     # Initial Control values
     u_control = np.zeros((4, t.shape[0]-N_prediction), dtype = np.double)
@@ -500,29 +527,29 @@ def main(vel_pub, vel_msg):
 
     # Limits Control values
     zp_ref_max = 3
-    phi_max = 0.8
-    theta_max = 0.8
-    psi_max = 2.0
+    phi_max = 0.25
+    theta_max = 0.25
+    
 
     zp_ref_min = -zp_ref_max
     phi_min = -phi_max
     theta_min = -theta_max
-    psi_min = -psi_max
+    
 
     # Create Optimal problem
     model, f = f_system_model()
 
-    ocp = create_ocp_solver_description(x[:,0], N_prediction, t_prediction, zp_ref_max, zp_ref_min, phi_max, phi_min, theta_max, theta_min, psi_max, psi_min)
+    ocp = create_ocp_solver_description(x[:,0], N_prediction, t_prediction, zp_ref_max, zp_ref_min, phi_max, phi_min, theta_max, theta_min)
     #acados_ocp_solver = AcadosOcpSolver(ocp, json_file="acados_ocp_" + ocp.model.name + ".json", build= True, generate= True)
 
     solver_json = 'acados_ocp_' + model.name + '.json'
     
-    #AcadosOcpSolver.generate(ocp, json_file=solver_json)
-    #AcadosOcpSolver.build(ocp.code_export_directory, with_cython=True)
-    #acados_ocp_solver = AcadosOcpSolver.create_cython_solver(solver_json)
+    AcadosOcpSolver.generate(ocp, json_file=solver_json)
+    AcadosOcpSolver.build(ocp.code_export_directory, with_cython=True)
+    acados_ocp_solver = AcadosOcpSolver.create_cython_solver(solver_json)
     
     
-    acados_ocp_solver = AcadosOcpSolverCython(ocp.model.name, ocp.solver_options.nlp_solver_type, ocp.dims.N)
+    #acados_ocp_solver = AcadosOcpSolverCython(ocp.model.name, ocp.solver_options.nlp_solver_type, ocp.dims.N)
 
     nx = ocp.model.x.size()[0]
     nu = ocp.model.u.size()[0]
@@ -536,27 +563,39 @@ def main(vel_pub, vel_msg):
     # Encabezados de los estados
     headers = ["hx", "hy", "hz", "phi", "theta", "psi", "hx_p", "hy_p", "hz_p", "phi_p", "theta_p", "psi_p"]
 
-   # Imprimir los encabezados
     
-
-    # Lista para almacenar los valores anteriores
-
-
     for k in range(0, t.shape[0]-N_prediction):
         tic = time.time()
 
-        xref[0,k:] = 0
-        xref[1,k:] = 0
-        xref[2,k:] = 0
-        xref[3,k:] = 0
-        xref[4,k:] = 0
-        xref[5,k:] = 0
-        xref[6,k:] = hdp_vision[0]
-        xref[7,k:] = hdp_vision[1]
-        xref[8,k:] = hdp_vision[2]
-        xref[9,k:] = 0
-        xref[10,k:] = 0
-        xref[11,k:] = 0.5
+         # Reference Signal of the system
+        
+
+        condicion = axes[5]
+        if condicion  == -4545.0:
+            xref[6,k:] = axes[0]
+            xref[7,k:] = axes[1]
+            xref[8,k:] = axes[3]
+            xref[11,k:] = (np.pi*axes[2])/2
+            #print("RC")
+            #print("RC:", " ".join("{:.2f}".format(value) for value in np.round(xref[6:11, k], decimals=2)), end='\r')
+
+        elif condicion == -10000.0:        
+            xref[6,k:] = hdp_vision[0]
+            xref[7,k:] = hdp_vision[1]
+            xref[8,k:] = hdp_vision[2]
+            xref[11,k:] = hdp_vision[5]
+            #print("Servo-Visual:", " ".join("{:.2f}".format(value) for value in np.round(xref[6:11, k], decimals=2)), end='\r')
+        
+        else:
+            xref[6,k:] = 0
+            xref[7,k:] = 0
+            xref[8,k:] = 0
+            xref[11,k:] = 0
+            print("HERE")
+
+
+        
+        
         # Control Law Section
         acados_ocp_solver.set(0, "lbx", x[:,k])
         acados_ocp_solver.set(0, "ubx", x[:,k])
@@ -575,13 +614,13 @@ def main(vel_pub, vel_msg):
 
         # Get Control Signal
         u_control[:, k] = acados_ocp_solver.get(0, "u")
-        
+
+                
         # Send Control values
         send_velocity_control(u_control[:, k], vel_pub, vel_msg)
 
         #Imprime El vector de estados
-       
-        # Dentro del bucle
+        
         state_vector = np.ravel(x[:, k])
         max_header_length = max(len(header) for header in headers)
         for header, value in zip(headers, state_vector):
@@ -589,12 +628,11 @@ def main(vel_pub, vel_msg):
             print(f"{formatted_header}: {value:.2f}")
         print()
 
-
         # System Evolution
         x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
+        send_state_to_topic(x_sim[:, k+1])
         
         #Simula la odometria real
-        send_state_to_topic(x_sim[:, k+1])
         data_pose = np.array([[x_real, y_real, z_real, qx_real, qy_real, qz_real, qw_real]], dtype=np.double)
         data_velocity = np.array([[vx_real, vy_real, vz_real, wx_real, wy_real, wz_real]], dtype=np.double)
         x[:, k+1] = get_odometry(data_pose, data_velocity)
@@ -604,29 +642,28 @@ def main(vel_pub, vel_msg):
                 None
         toc = time.time() - tic 
         #print(toc)
-        
     send_velocity_control([0, 0, 0, 0], vel_pub, vel_msg)
 
 
 
     fig1, ax11 = fancy_plots_1()
-    states_x, = ax11.plot(t[0:x.shape[1]], x[6,:],
+    states_x, = ax11.plot(t[0:x.shape[1]], x[9,:],
                     color='#BB5651', lw=1, ls="-")
-    states_y, = ax11.plot(t[0:x.shape[1]], x[7,:],
+    states_y, = ax11.plot(t[0:x.shape[1]], x[10,:],
                     color='#69BB51', lw=1, ls="-")
-    states_z, = ax11.plot(t[0:x.shape[1]], x[8,:],
+    states_z, = ax11.plot(t[0:x.shape[1]], x[11,:],
                     color='#5189BB', lw=1, ls="-")
-    states_xd, = ax11.plot(t[0:x.shape[1]], xref[6,0:x.shape[1]],
+    states_xd, = ax11.plot(t[0:x.shape[1]], xref[9,0:x.shape[1]],
                     color='#BB5651', lw=2, ls="--")
-    states_yd, = ax11.plot(t[0:x.shape[1]], xref[7,0:x.shape[1]],
+    states_yd, = ax11.plot(t[0:x.shape[1]], xref[10,0:x.shape[1]],
                     color='#69BB51', lw=2, ls="--")
-    states_zd, = ax11.plot(t[0:x.shape[1]], xref[8,0:x.shape[1]],
+    states_zd, = ax11.plot(t[0:x.shape[1]], xref[11,0:x.shape[1]],
                     color='#5189BB', lw=2, ls="--")
 
     ax11.set_ylabel(r"$[states]$", rotation='vertical')
     ax11.set_xlabel(r"$[t]$", labelpad=5)
     ax11.legend([states_x, states_y, states_z, states_xd, states_yd, states_zd],
-            [r'$xp$', r'$yp$', r'$zp$', r'$xp_d$', r'$yp_d$', r'$zp_d$'],
+            [r'$p$', r'$q$', r'$r$', r'$p_d$', r'$q_d$', r'$r_d$'],
             loc="best",
             frameon=True, fancybox=True, shadow=False, ncol=2,
             borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
@@ -636,7 +673,7 @@ def main(vel_pub, vel_msg):
     fig1.savefig("states_xyz.eps")
     fig1.savefig("states_xyz.png")
     fig1
-    plt.show()
+    #plt.show()
 
     fig2, ax12 = fancy_plots_1()
     states_phi, = ax12.plot(t[0:x.shape[1]], x[3,:],
@@ -659,7 +696,7 @@ def main(vel_pub, vel_msg):
     fig2.savefig("states_angles.eps")
     fig2.savefig("states_angles.png")
     fig2
-    plt.show()
+    #plt.show()
 
     fig3, ax13 = fancy_plots_1()
     ## Axis definition necesary to fancy plots
@@ -683,7 +720,7 @@ def main(vel_pub, vel_msg):
     fig3.savefig("time.eps")
     fig3.savefig("time.png")
     fig3
-    plt.show()
+    #plt.show()
 
     print(f'Mean iteration time with MLP Model: {1000*np.mean(delta_t):.1f}ms -- {1/np.mean(delta_t):.0f}Hz)')
 
@@ -697,6 +734,7 @@ if __name__ == '__main__':
         odometry_topic = "/dji_sdk/odometry"
         velocity_subscriber = rospy.Subscriber(odometry_topic, Odometry, odometry_call_back)
         vision_sub = rospy.Subscriber("/dji_sdk/visual_servoing/vel/drone_world", Twist, visual_callback, queue_size=10)
+        RC_sub = rospy.Subscriber("/dji_sdk/rc", Joy, rc_callback, queue_size=10)
         
         velocity_topic = "/m100/velocityControl"
         velocity_message = Twist()
