@@ -745,7 +745,8 @@ if __name__ == '__main__':
 
         main(velocity_publisher, velocity_message)
     except(rospy.ROSInterruptException, KeyboardInterrupt):
-        print("Error System")
+        print("\nError System")
+        send_velocity_control([0, 0, 0, 0], velocity_publisher, velocity_message)
         pass
     else:
         print("Complete Execution")

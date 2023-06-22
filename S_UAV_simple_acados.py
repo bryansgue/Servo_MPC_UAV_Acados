@@ -419,6 +419,21 @@ def send_state_to_topic(state_vector):
     # Publish the message
     publisher.publish(odometry_msg)
 
+
+def get_odometry_simple_sim():
+
+    global x_real, y_real, z_real, qx_real, qy_real, qz_real, qw_real, vx_real, vy_real, vz_real, wx_real, wy_real, wz_real
+
+    quaternion = [qx_real, qy_real, qz_real, qw_real ]
+    r_quat = R.from_quat(quaternion)
+    euler =  r_quat.as_euler('zyx', degrees = False)
+    psi = euler[0]
+
+
+    x_state = [x_real,y_real,z_real,psi,vx_real, vy_real, vz_real, wz_real]
+
+    return x_state
+
 def main(vel_pub, vel_msg):
     # Initial Values System
     # Simulation Time
@@ -494,6 +509,10 @@ def main(vel_pub, vel_msg):
     Ez = np.zeros((1, t.shape[0]-N_prediction), dtype = np.double)
 
     # Simulation System
+    ros_rate = 30  # Tasa de ROS en Hz
+    rate = rospy.Rate(ros_rate)  # Crear un objeto de la clase rospy.Rate
+
+    # Simulation System
     for k in range(0, t.shape[0]-N_prediction):
         tic = time.time()
                  # Reference Signal of the system
@@ -503,14 +522,14 @@ def main(vel_pub, vel_msg):
             xref[4,k:] = axes[0]
             xref[5,k:] = axes[1]
             xref[6,k:] = axes[3]
-            xref[7,k:] = (np.pi*axes[2])/2
+            xref[7,k:] = axes[2]
             #print("RC")
             #print("RC:", " ".join("{:.2f}".format(value) for value in np.round(xref[4:7, k], decimals=2)), end='\r')
 
         elif condicion == -10000.0:        
             xref[4,k:] = hdp_vision[0]
             xref[5,k:] = hdp_vision[1]
-            xref[6,k:] = hdp_vision[2]
+            xref[6,k:] = axes[3]
             xref[7,k:] = hdp_vision[5]
             #print("Servo-Visual:", " ".join("{:.2f}".format(value) for value in np.round(xref[4:7, k], decimals=2)), end='\r')
         
@@ -546,15 +565,17 @@ def main(vel_pub, vel_msg):
         # System Evolution
         #x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
         #send_state_to_topic(x_sim[:, k+1])
+        #x[:, k+1] = get_odometry_simple_sim()
 
         
         x[:, k+1] = get_odometry_simple()
         delta_t[:, k] = toc_solver
 
 
-        print("VEL:", " ".join("{:.2f}".format(value) for value in np.round(x[4:8, k], decimals=2)))
-        while (time.time() - tic <= t_s):
-                None
+        print("v_real:", " ".join("{:.2f}".format(value) for value in np.round(x[4:8, k], decimals=2)))
+        
+        
+        rate.sleep() 
         toc = time.time() - tic 
 
 
@@ -685,7 +706,8 @@ if __name__ == '__main__':
 
         main(velocity_publisher, velocity_message)
     except(rospy.ROSInterruptException, KeyboardInterrupt):
-        print("Error System")
+        print("\nError System")
+        send_velocity_control([0, 0, 0, 0], velocity_publisher, velocity_message)
         pass
     else:
         print("Complete Execution")
