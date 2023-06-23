@@ -14,14 +14,17 @@ from casadi import sin
 from casadi import solve
 from casadi import inv
 from casadi import mtimes
+import casadi as ca
 from fancy_plots import fancy_plots_2, fancy_plots_1
 import rospy
 from scipy.spatial.transform import Rotation as R
 from nav_msgs.msg import Odometry
 from sensor_msgs.msg import Joy
 
-from geometry_msgs.msg import Twist
+
+from geometry_msgs.msg import TwistStamped
 import math
+from std_msgs.msg import Header
 
 #from c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
 
@@ -49,12 +52,12 @@ def visual_callback(msg):
 
     global hdp_vision 
 
-    vx_visual = msg.linear.x
-    vy_visual = msg.linear.y
-    vz_visual = msg.linear.z
-    wx_visual = msg.angular.x
-    wy_visual = msg.angular.y
-    wz_visual = msg.angular.z
+    vx_visual = msg.twist.linear.x
+    vy_visual = msg.twist.linear.y
+    vz_visual = msg.twist.linear.z
+    wx_visual = msg.twist.angular.x
+    wy_visual = msg.twist.angular.y
+    wz_visual = msg.twist.angular.z
 
     hdp_vision = [vx_visual, vy_visual, vz_visual, wx_visual, wy_visual, wz_visual]
 
@@ -318,6 +321,15 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
 
     ocp.constraints.x0 = x0
 
+
+   # Restricciones de z
+    # Restricciones de x
+    zmin=2.5
+    zmax=5
+    ocp.constraints.lbx = np.array([zmin])
+    ocp.constraints.ubx = np.array([zmax])
+    ocp.constraints.idxbx = np.array([2])
+
     # set options
     ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"  # FULL_CONDENSING_QPOASES
     ocp.solver_options.hessian_approx = "GAUSS_NEWTON"  # 'GAUSS_NEWTON', 'EXACT'
@@ -366,12 +378,15 @@ def get_odometry_simple():
 
 def send_velocity_control(u, vel_pub, vel_msg):
     # velocity message
-    vel_msg.linear.x = u[0]
-    vel_msg.linear.y = u[1]
-    vel_msg.linear.z = u[2]
-    vel_msg.angular.x = 0
-    vel_msg.angular.y = 0
-    vel_msg.angular.z = u[3]
+
+    vel_msg.header.frame_id = "base_link"
+    vel_msg.header.stamp = rospy.Time.now()
+    vel_msg.twist.linear.x = u[0]
+    vel_msg.twist.linear.y = u[1]
+    vel_msg.twist.linear.z = u[2]
+    vel_msg.twist.angular.x = 0
+    vel_msg.twist.angular.y = 0
+    vel_msg.twist.angular.z = u[3]
 
     # Publish control values
     vel_pub.publish(vel_msg)
@@ -399,7 +414,7 @@ def send_state_to_topic(state_vector):
 
     quaternion = euler_to_quaternion(0, 0, state_vector[3])
 
-    odometry_msg.header.frame_id = "odo"
+    odometry_msg.header.frame_id = "odom"
     odometry_msg.header.stamp = rospy.Time.now()
     odometry_msg.pose.pose.position.x = state_vector[0]
     odometry_msg.pose.pose.position.y = state_vector[1]
@@ -529,7 +544,7 @@ def main(vel_pub, vel_msg):
         elif condicion == -10000.0:        
             xref[4,k:] = hdp_vision[0]
             xref[5,k:] = hdp_vision[1]
-            xref[6,k:] = axes[3]
+            xref[6,k:] = hdp_vision[2]
             xref[7,k:] = hdp_vision[5]
             #print("Servo-Visual:", " ".join("{:.2f}".format(value) for value in np.round(xref[4:7, k], decimals=2)), end='\r')
         
@@ -569,6 +584,7 @@ def main(vel_pub, vel_msg):
 
         
         x[:, k+1] = get_odometry_simple()
+        
         delta_t[:, k] = toc_solver
 
 
@@ -697,12 +713,12 @@ if __name__ == '__main__':
         velocity_subscriber = rospy.Subscriber(odometry_topic, Odometry, odometry_call_back)
 
 
-        vision_sub = rospy.Subscriber("/dji_sdk/visual_servoing/vel/drone_world", Twist, visual_callback, queue_size=10)
+        vision_sub = rospy.Subscriber("/dji_sdk/visual_servoing/vel/drone", TwistStamped, visual_callback, queue_size=10)
         RC_sub = rospy.Subscriber("/dji_sdk/rc", Joy, rc_callback, queue_size=10)
         
         velocity_topic = "/m100/velocityControl"
-        velocity_message = Twist()
-        velocity_publisher = rospy.Publisher(velocity_topic, Twist, queue_size=10)
+        velocity_message = TwistStamped()
+        velocity_publisher = rospy.Publisher(velocity_topic, TwistStamped, queue_size=10)
 
         main(velocity_publisher, velocity_message)
     except(rospy.ROSInterruptException, KeyboardInterrupt):
