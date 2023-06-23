@@ -342,8 +342,8 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
     ocp.dims.N = N_horizon
 
     # set cost
-    Q_mat = 1 * np.diag([0, 0, 0, 0, 0, 0, 0.2, 0.2, 0.2, 0.0, 0.0, 1000])  # [x,th,dx,dth]
-    R_mat = 0 * np.diag([(1/zp_max),  (1/phi_max), (1/theta_max), 0.15])
+    Q_mat = 1 * np.diag([0, 0, 0, 0, 0, 0, 0.2, 0.2, 0.2, 0.0, 0.0, 1])  # [x,th,dx,dth]
+    R_mat = 1 * np.diag([(1/zp_max),  (1/phi_max), (1/theta_max), 1*(1/0.9)])
 
     ocp.cost.cost_type = "LINEAR_LS"
     ocp.cost.cost_type_e = "LINEAR_LS"
@@ -378,6 +378,7 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
     ocp.solver_options.hessian_approx = "GAUSS_NEWTON"  # 'GAUSS_NEWTON', 'EXACT'
     ocp.solver_options.integrator_type = "ERK"
     ocp.solver_options.nlp_solver_type = "SQP_RTI"  # SQP_RTI, SQP
+    ocp.solver_options.tol = 1e-4
 
     # set prediction horizon
     ocp.solver_options.tf = t_horizon
@@ -393,18 +394,7 @@ def Euler_p(omega, euler):
     return euler_p
 
 
-def get_odometry(pose, velocity):
-    displacement = [pose[0,0], pose[0,1], pose[0,2]]
-    quaternion = [pose[0,3], pose[0,4], pose[0,5], pose[0,6]]
-    r_quat = R.from_quat(quaternion)
-    euler =  r_quat.as_euler('zyx', degrees = False)
-    linear_velocity = [velocity[0,0], velocity[0,1], velocity[0,2]]
-    angular_velocity = [velocity[0,3], velocity[0,4], velocity[0,5]]
-    euler_p = Euler_p(angular_velocity,[euler[2], euler[1], euler[0]])
-    state = np.array([displacement[0], displacement[1], displacement[2], euler[2], euler[1], euler[0], linear_velocity[0], linear_velocity[1], linear_velocity[2], euler_p[0], euler_p[1], euler_p[2]])
-    # Imprimir el vector euler_p con dos decimales
-    #print("[{:.2f}]".format(euler_p[2]))
-    return state
+
 
 def send_velocity_control(u, vel_pub, vel_msg):
     # Split  control values
@@ -486,14 +476,35 @@ def rc_callback(data):
     axes = R@axes_aux
 
 
+def get_odometry_full():
+
+    global x_real, y_real, z_real, qx_real, qy_real, qz_real, qw_real, vx_real, vy_real, vz_real, wx_real, wy_real, wz_real
+
+    quaternion = [qx_real, qy_real, qz_real, qw_real ]
+    r_quat = R.from_quat(quaternion)
+    q2e =  r_quat.as_euler('zyx', degrees = False)
+    phi = q2e[2]
+    theta = q2e[1]
+    psi = q2e[0]
+
+    omega = [wx_real, wy_real, wz_real]
+    euler = [phi, theta, psi]
+    euler_p = Euler_p(omega,euler)
+
+    x_state = [x_real,y_real,z_real,phi,theta,psi,vx_real,vy_real,vz_real, euler_p[0],euler_p[1],wz_real]
+
+    return x_state
+
 def main(vel_pub, vel_msg):
     # Initial Values System
     # Simulation Time
-    t_final = 60
+    t_final = 60*1
     # Sample time
-    t_s = 0.03
+    frec= 30
+    t_s = 1/frec
     # Prediction Time
-    t_prediction= 1
+    N_horizont = 60
+    t_prediction = N_horizont/frec
 
     # Nodes inside MPC
     N = np.arange(0, t_prediction + t_s, t_s)
@@ -513,12 +524,9 @@ def main(vel_pub, vel_msg):
     x_sim = np.zeros((12, t.shape[0]+1-N_prediction), dtype = np.double)
 
     # Read Values Odometry Drone
-    #send_state_to_topic(x_sim[:, 0])
-    data_pose = np.array([[x_real, y_real, z_real, qx_real, qy_real, qz_real, qw_real]], dtype=np.double)
-    data_velocity = np.array([[vx_real, vy_real, vz_real, wx_real, wy_real, wz_real]], dtype=np.double)
-
+ 
     # Read Real data
-    x[:, 0] = get_odometry(data_pose, data_velocity)
+    x[:, 0] = get_odometry_full()
 
 
     # Initial Control values
@@ -563,6 +571,9 @@ def main(vel_pub, vel_msg):
     # Encabezados de los estados
     headers = ["hx", "hy", "hz", "phi", "theta", "psi", "hx_p", "hy_p", "hz_p", "phi_p", "theta_p", "psi_p"]
 
+    # Simulation System
+    ros_rate = 30  # Tasa de ROS en Hz
+    rate = rospy.Rate(ros_rate)  # Crear un objeto de la clase rospy.Rate
     
     for k in range(0, t.shape[0]-N_prediction):
         tic = time.time()
@@ -575,7 +586,7 @@ def main(vel_pub, vel_msg):
             xref[6,k:] = axes[0]
             xref[7,k:] = axes[1]
             xref[8,k:] = axes[3]
-            xref[11,k:] = (np.pi*axes[2])/2
+            xref[11,k:] = axes[2]
             #print("RC")
             #print("RC:", " ".join("{:.2f}".format(value) for value in np.round(xref[6:11, k], decimals=2)), end='\r')
 
@@ -629,19 +640,19 @@ def main(vel_pub, vel_msg):
         print()
 
         # System Evolution
-        x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
-        send_state_to_topic(x_sim[:, k+1])
+        #x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
+        #send_state_to_topic(x_sim[:, k+1])
         
         #Simula la odometria real
-        data_pose = np.array([[x_real, y_real, z_real, qx_real, qy_real, qz_real, qw_real]], dtype=np.double)
-        data_velocity = np.array([[vx_real, vy_real, vz_real, wx_real, wy_real, wz_real]], dtype=np.double)
-        x[:, k+1] = get_odometry(data_pose, data_velocity)
+        
+        x[:, k+1] = get_odometry_full()
         
         delta_t[:, k] = toc_solver
-        while (time.time() - tic <= t_s):
-                None
+        rate.sleep() 
         toc = time.time() - tic 
         #print(toc)
+    
+    
     send_velocity_control([0, 0, 0, 0], vel_pub, vel_msg)
 
 
