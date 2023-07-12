@@ -187,8 +187,7 @@ def f_system_model():
     model_name = 'Drone_ode'
     # Dynamic Values of the system
 
-    chi = [    0.3259,         0,    0.3788,         0,    0.4144,         0,         0,    0.2295,    0.7623,         0, 0.8278,         0,    0.8437,         0,         0,         0,         0,    1.0390]
-
+    
     # set up states & controls
     # Position
     nx = MX.sym('nx') 
@@ -229,25 +228,29 @@ def f_system_model():
     a = 0
     b = 0
     J = calc_J(x, a, b)
-    M = calc_M(chi,a,b, x)
-    C = calc_C(chi,a,b, x)
-    G = calc_G()
 
+    A = np.array([[-1.4692, 0.1134, -0.9113, 0.6233],
+          [0.3882, -1.2124, -1.0155, 0.8786],
+          [0.0026, -0.0166, -3.2147, 0.2079],
+          [-0.0261, -0.0317, -0.5068, -5.4358]])
+
+    B = np.array([[2.3499, 0.0035, 1.0635, -0.0676],
+          [-0.2289, 1.7269, 0.6634, -0.7431],
+          [0.0027, 0.0203, 3.2273, -0.1985],
+          [0.0077, 0.0943, 0.4583, 5.2311]])
+    
     # Crear matriz A
     A_top = horzcat(MX.zeros(4, 4), J)
-    A_bottom = horzcat(MX.zeros(4, 4), -mtimes(inv(M), C))
-    A = vertcat(A_top, A_bottom)
+    A_bottom = horzcat(MX.zeros(4, 4), A)
+    M = vertcat(A_top, A_bottom)
 
     # Crear matriz B
     B_top = MX.zeros(4, 4)
-    B_bottom = inv(M)
-    B = vertcat(B_top, B_bottom)
-
-    # Crear vector aux
-    aux = vertcat(MX.zeros(4, 1), -mtimes(inv(M), G))
+    B_bottom = B
+    C = vertcat(B_top, B_bottom)
 
     f_expl = MX.zeros(8, 1)
-    f_expl = A @ x + B @ u + aux
+    f_expl = M @ x + C @ u 
 
     f_system = Function('system',[x, u], [f_expl])
      # Acados Model
@@ -287,9 +290,9 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
     ocp.dims.N = N_horizon
 
     # set cost
-    Q_mat = 1 * np.diag([0, 0, 0, 0, 1.5, 1.5, 0.8, 0.5])  # [x,th,dx,dth]
-    R_mat = 0.4* np.diag([1*(1/ul_max),  1*(1/um_max), (1/un_max), (1/w_max)])
-    #R_mat = 0.01 * np.diag([1,  1, 1, 1])
+    Q_mat = 2.5 * np.diag([0, 0, 0, 0, 1, 1, 1, 1])  # [x,th,dx,dth]
+    #R_mat = 1* np.diag([1*(1/ul_max),  1*(1/um_max), (1/un_max), (1/w_max)])
+    R_mat = 0.5 * np.diag([1,  1, 1, 1])
 
 
     ocp.cost.cost_type = "LINEAR_LS"
@@ -315,9 +318,9 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
 
     # set constraints
     
-    ocp.constraints.lbu = np.array([ul_min, um_min, un_min, w_min])
-    ocp.constraints.ubu = np.array([ul_max, um_max, un_max, w_max])
-    ocp.constraints.idxbu = np.array([0, 1, 2, 3])
+    #ocp.constraints.lbu = np.array([ul_min, um_min, un_min, w_min])
+    #ocp.constraints.ubu = np.array([ul_max, um_max, un_max, w_max])
+    #ocp.constraints.idxbu = np.array([0, 1, 2, 3])
 
     ocp.constraints.x0 = x0
 
@@ -325,7 +328,7 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
    # Restricciones de z
     # Restricciones de x
     zmin=2.5
-    zmax=5
+    zmax=10
     ocp.constraints.lbx = np.array([zmin])
     ocp.constraints.ubx = np.array([zmax])
     ocp.constraints.idxbx = np.array([2])
