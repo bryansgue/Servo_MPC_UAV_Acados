@@ -20,12 +20,14 @@ from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Joy
 import math
 
+from geometry_msgs.msg import TwistStamped
+
 #from c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
 
 # Global variables Odometry Drone Condicion inicial
 x_real = 0.0
 y_real = 0.0
-z_real = 0
+z_real = 2
 vx_real = 0.0
 vy_real = 0.0
 vz_real = 0.0
@@ -33,13 +35,13 @@ vz_real = 0.0
 # Angular velocities
 qx_real = 0.0005
 qy_real = 0.0
-qz_real = 0.0
-qw_real = 1.0
+qz_real = 0.1986693
+qw_real = 0.98800666
 wx_real = 0.0
 wy_real = 0.0
 wz_real = 0.0
 
-hdp_vision = [0,0,0,0,0,0]
+hdp_vision = [0,0,0,0,0,0.0]
 axes = [0,0,0,0,0,0]
 
 def odometry_call_back(odom_msg):
@@ -314,16 +316,53 @@ def f_d(x, u, ts, f_sys):
     aux_x = np.array(x[:,0]).reshape((12,))
     return aux_x
 
+
+def f_yaw():
+    value = axes[2]
+    return value
+
+def RK4_yaw(x, ts, f_yaw):
+    k1 = f_yaw()
+    k2 = f_yaw()
+    k3 = f_yaw()
+    k4 = f_yaw()
+    x = x + (ts/6)*(k1 +2*k2 +2*k3 +k4) 
+    aux_x = np.array(x[0]).reshape((1,))
+    return aux_x
+
+def Angulo(ErrAng):
+    # 1) ARGUMENTOS DE ENTRADA
+    # a) ErrAng ----> ángulo en radianes
+
+    # 2) ARGUMENTOS DE SALIDA
+    # a) ErrAng ----> ángulo de entrada limitado entre [0 : pi] y [-pi : 0]
+
+    # Limitar el ángulo entre [0 : pi]
+    if ErrAng >= math.pi:
+        while ErrAng >= math.pi:
+            ErrAng = ErrAng - 2 * math.pi
+        return ErrAng
+
+    # Limitar el ángulo entre [-pi : 0]
+    if ErrAng <= -math.pi:
+        while ErrAng <= -math.pi:
+            ErrAng = ErrAng + 2 * math.pi
+        return ErrAng
+
+    return ErrAng
+
+
+
 def visual_callback(msg):
 
     global hdp_vision 
 
-    vx_visual = msg.linear.x
-    vy_visual = msg.linear.y
-    vz_visual = msg.linear.z
-    wx_visual = msg.angular.x
-    wy_visual = msg.angular.y
-    wz_visual = msg.angular.z
+    vx_visual = msg.twist.linear.x
+    vy_visual = msg.twist.linear.y
+    vz_visual = msg.twist.linear.z
+    wx_visual = msg.twist.angular.x
+    wy_visual = msg.twist.angular.y
+    wz_visual = msg.twist.angular.z
 
     hdp_vision = [vx_visual, vy_visual, vz_visual, wx_visual, wy_visual, wz_visual]
     
@@ -342,8 +381,15 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
     ocp.dims.N = N_horizon
 
     # set cost
-    Q_mat = 1 * np.diag([0, 0, 0, 0, 0, 0, 0.2, 0.2, 0.2, 0.0, 0.0, 1])  # [x,th,dx,dth]
-    R_mat = 1 * np.diag([(1/zp_max),  (1/phi_max), (1/theta_max), 1*(1/0.9)])
+    gain_yaw = 1.2
+    gain_vx = 0.4
+    gain_vy = 0.4
+    gain_vz = 1
+    alpha =3.5
+    beta =3.5
+    gamma =1.5
+    Q_mat = 1 * np.diag([0, 0, 0, 0, 0, gain_yaw, gain_vx, gain_vy, gain_vz, 0.0, 0.0, 0])  # [x,th,dx,dth]
+    R_mat = 1 * np.diag([3.5*(1/zp_max),  alpha*(1/phi_max), beta*(1/theta_max), gamma*(1)])
 
     ocp.cost.cost_type = "LINEAR_LS"
     ocp.cost.cost_type_e = "LINEAR_LS"
@@ -372,6 +418,14 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
     ocp.constraints.idxbu = np.array([0, 1, 2])
 
     ocp.constraints.x0 = x0
+
+    # Restricciones de z
+
+    zmin=1.5
+    zmax=8
+    ocp.constraints.lbx = np.array([zmin])
+    ocp.constraints.ubx = np.array([zmax])
+    ocp.constraints.idxbx = np.array([2])
 
     # set options
     ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"  # FULL_CONDENSING_QPOASES
@@ -404,13 +458,13 @@ def send_velocity_control(u, vel_pub, vel_msg):
     tz = u[3]
 
     # velocity message
-    vel_msg.linear.x = 0.0
-    vel_msg.linear.y = 0.0
-    vel_msg.linear.z = F
+    vel_msg.twist.linear.x = 0.0
+    vel_msg.twist.linear.y = 0.0
+    vel_msg.twist.linear.z = F
 
-    vel_msg.angular.x = tx
-    vel_msg.angular.y = ty
-    vel_msg.angular.z = tz
+    vel_msg.twist.angular.x = tx
+    vel_msg.twist.angular.y = ty
+    vel_msg.twist.angular.z = tz
 
     # Publish control values
     vel_pub.publish(vel_msg)
@@ -491,14 +545,14 @@ def get_odometry_full():
     euler = [phi, theta, psi]
     euler_p = Euler_p(omega,euler)
 
-    x_state = [x_real,y_real,z_real,phi,theta,psi,vx_real,vy_real,vz_real, euler_p[0],euler_p[1],wz_real]
+    x_state = [x_real,y_real,z_real,phi,theta,psi,vx_real,vy_real,vz_real, euler_p[0],euler_p[1],euler_p[2]]
 
     return x_state
 
 def main(vel_pub, vel_msg):
     # Initial Values System
     # Simulation Time
-    t_final = 60*1
+    t_final = 60*10
     # Sample time
     frec= 30
     t_s = 1/frec
@@ -523,20 +577,21 @@ def main(vel_pub, vel_msg):
     xref = np.zeros((16, t.shape[0]), dtype = np.double)
     x_sim = np.zeros((12, t.shape[0]+1-N_prediction), dtype = np.double)
 
+
+    aux_yaw_d = np.zeros((1, t.shape[0]+1-N_prediction), dtype = np.double)
+
     # Read Values Odometry Drone
  
-    # Read Real data
-    x[:, 0] = get_odometry_full()
-
+   
 
     # Initial Control values
     u_control = np.zeros((4, t.shape[0]-N_prediction), dtype = np.double)
     #u_control = np.zeros((4, t.shape[0]), dtype = np.double)
 
     # Limits Control values
-    zp_ref_max = 3
-    phi_max = 0.25
-    theta_max = 0.25
+    zp_ref_max = 5
+    phi_max = 0.5
+    theta_max = 0.5
     
 
     zp_ref_min = -zp_ref_max
@@ -575,6 +630,18 @@ def main(vel_pub, vel_msg):
     ros_rate = 30  # Tasa de ROS en Hz
     rate = rospy.Rate(ros_rate)  # Crear un objeto de la clase rospy.Rate
     
+
+     # Read Real data
+    for ii in range(0,10):
+        x[:, 0] = get_odometry_full()
+        print("Loading...")
+        rate.sleep()
+
+    print("Ready!!!")
+       
+    aux_yaw_d[:,0] = x[5,0]
+
+
     for k in range(0, t.shape[0]-N_prediction):
         tic = time.time()
 
@@ -586,18 +653,24 @@ def main(vel_pub, vel_msg):
             xref[6,k:] = axes[0]
             xref[7,k:] = axes[1]
             xref[8,k:] = axes[3]
-            xref[11,k:] = axes[2]
-            #print("RC")
+            aux_angle = x[5, k]
+            xref[5,k:] = aux_yaw_d[:,k]
+
+            aux_yaw_d[:,k+1] = Angulo(axes[2] * t_s*0.5 + aux_yaw_d[:,k])
+            
+            #print(aux_angle) 
             #print("RC:", " ".join("{:.2f}".format(value) for value in np.round(xref[6:11, k], decimals=2)), end='\r')
 
         elif condicion == -10000.0:        
             xref[6,k:] = hdp_vision[0]
             xref[7,k:] = hdp_vision[1]
             xref[8,k:] = hdp_vision[2]
-            xref[11,k:] = hdp_vision[5]
+            xref[5,k:] = aux_yaw_d[:,k]
+            aux_yaw_d[:,k+1] = Angulo(hdp_vision[5] * t_s*0.5 + aux_yaw_d[:,k])
             #print("Servo-Visual:", " ".join("{:.2f}".format(value) for value in np.round(xref[6:11, k], decimals=2)), end='\r')
         
         else:
+            xref[5,k:] = x[5, k]
             xref[6,k:] = 0
             xref[7,k:] = 0
             xref[8,k:] = 0
@@ -621,11 +694,16 @@ def main(vel_pub, vel_msg):
         # Get Computational Time
         status = acados_ocp_solver.solve()
 
+        if status != 0:
+            print("Falla del sistema")
+            send_velocity_control([0, 0, 0, 0], velocity_publisher, velocity_message)
+            break
+
         toc_solver = time.time()- tic
 
         # Get Control Signal
         u_control[:, k] = acados_ocp_solver.get(0, "u")
-
+        #u_control[3, k] = 0.7 * np.sin(0.5*t[k])
                 
         # Send Control values
         send_velocity_control(u_control[:, k], vel_pub, vel_msg)
@@ -646,6 +724,12 @@ def main(vel_pub, vel_msg):
         #Simula la odometria real
         
         x[:, k+1] = get_odometry_full()
+
+          
+        #aux_yaw_d[:,k+1] = (RK4_yaw(aux_yaw_d[:,k], t_s, f_yaw))
+
+ 
+
         
         delta_t[:, k] = toc_solver
         rate.sleep() 
@@ -657,81 +741,81 @@ def main(vel_pub, vel_msg):
 
 
 
-    fig1, ax11 = fancy_plots_1()
-    states_x, = ax11.plot(t[0:x.shape[1]], x[9,:],
-                    color='#BB5651', lw=1, ls="-")
-    states_y, = ax11.plot(t[0:x.shape[1]], x[10,:],
-                    color='#69BB51', lw=1, ls="-")
-    states_z, = ax11.plot(t[0:x.shape[1]], x[11,:],
-                    color='#5189BB', lw=1, ls="-")
-    states_xd, = ax11.plot(t[0:x.shape[1]], xref[9,0:x.shape[1]],
-                    color='#BB5651', lw=2, ls="--")
-    states_yd, = ax11.plot(t[0:x.shape[1]], xref[10,0:x.shape[1]],
-                    color='#69BB51', lw=2, ls="--")
-    states_zd, = ax11.plot(t[0:x.shape[1]], xref[11,0:x.shape[1]],
-                    color='#5189BB', lw=2, ls="--")
+    # fig1, ax11 = fancy_plots_1()
+    # states_x, = ax11.plot(t[0:x.shape[1]], x[9,:],
+    #                 color='#BB5651', lw=1, ls="-")
+    # states_y, = ax11.plot(t[0:x.shape[1]], x[10,:],
+    #                 color='#69BB51', lw=1, ls="-")
+    # states_z, = ax11.plot(t[0:x.shape[1]], x[11,:],
+    #                 color='#5189BB', lw=1, ls="-")
+    # states_xd, = ax11.plot(t[0:x.shape[1]], xref[9,0:x.shape[1]],
+    #                 color='#BB5651', lw=2, ls="--")
+    # states_yd, = ax11.plot(t[0:x.shape[1]], xref[10,0:x.shape[1]],
+    #                 color='#69BB51', lw=2, ls="--")
+    # states_zd, = ax11.plot(t[0:x.shape[1]], xref[11,0:x.shape[1]],
+    #                 color='#5189BB', lw=2, ls="--")
 
-    ax11.set_ylabel(r"$[states]$", rotation='vertical')
-    ax11.set_xlabel(r"$[t]$", labelpad=5)
-    ax11.legend([states_x, states_y, states_z, states_xd, states_yd, states_zd],
-            [r'$p$', r'$q$', r'$r$', r'$p_d$', r'$q_d$', r'$r_d$'],
-            loc="best",
-            frameon=True, fancybox=True, shadow=False, ncol=2,
-            borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
-            borderaxespad=0.3, columnspacing=2)
-    ax11.grid(color='#949494', linestyle='-.', linewidth=0.5)
+    # ax11.set_ylabel(r"$[states]$", rotation='vertical')
+    # ax11.set_xlabel(r"$[t]$", labelpad=5)
+    # ax11.legend([states_x, states_y, states_z, states_xd, states_yd, states_zd],
+    #         [r'$p$', r'$q$', r'$r$', r'$p_d$', r'$q_d$', r'$r_d$'],
+    #         loc="best",
+    #         frameon=True, fancybox=True, shadow=False, ncol=2,
+    #         borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
+    #         borderaxespad=0.3, columnspacing=2)
+    # ax11.grid(color='#949494', linestyle='-.', linewidth=0.5)
 
-    fig1.savefig("states_xyz.eps")
-    fig1.savefig("states_xyz.png")
-    fig1
-    #plt.show()
+    # fig1.savefig("states_xyz.eps")
+    # fig1.savefig("states_xyz.png")
+    # fig1
+    # #plt.show()
 
-    fig2, ax12 = fancy_plots_1()
-    states_phi, = ax12.plot(t[0:x.shape[1]], x[3,:],
-                    color='#BB5651', lw=2, ls="-")
-    states_theta, = ax12.plot(t[0:x.shape[1]], x[4,:],
-                    color='#69BB51', lw=2, ls="-")
-    states_psi, = ax12.plot(t[0:x.shape[1]], x[5,:],
-                    color='#5189BB', lw=2, ls="-")
+    # fig2, ax12 = fancy_plots_1()
+    # states_phi, = ax12.plot(t[0:x.shape[1]], x[3,:],
+    #                 color='#BB5651', lw=2, ls="-")
+    # states_theta, = ax12.plot(t[0:x.shape[1]], x[4,:],
+    #                 color='#69BB51', lw=2, ls="-")
+    # states_psi, = ax12.plot(t[0:x.shape[1]], x[5,:],
+    #                 color='#5189BB', lw=2, ls="-")
 
-    ax12.set_ylabel(r"$[states]$", rotation='vertical')
-    ax12.set_xlabel(r"$[t]$", labelpad=5)
-    ax12.legend([states_phi, states_theta, states_psi],
-            [r'$\phi$', r'$\theta$', r'$\psi$'],
-            loc="best",
-            frameon=True, fancybox=True, shadow=False, ncol=2,
-            borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
-            borderaxespad=0.3, columnspacing=2)
-    ax12.grid(color='#949494', linestyle='-.', linewidth=0.5)
+    # ax12.set_ylabel(r"$[states]$", rotation='vertical')
+    # ax12.set_xlabel(r"$[t]$", labelpad=5)
+    # ax12.legend([states_phi, states_theta, states_psi],
+    #         [r'$\phi$', r'$\theta$', r'$\psi$'],
+    #         loc="best",
+    #         frameon=True, fancybox=True, shadow=False, ncol=2,
+    #         borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
+    #         borderaxespad=0.3, columnspacing=2)
+    # ax12.grid(color='#949494', linestyle='-.', linewidth=0.5)
 
-    fig2.savefig("states_angles.eps")
-    fig2.savefig("states_angles.png")
-    fig2
-    #plt.show()
+    # fig2.savefig("states_angles.eps")
+    # fig2.savefig("states_angles.png")
+    # fig2
+    # #plt.show()
 
-    fig3, ax13 = fancy_plots_1()
-    ## Axis definition necesary to fancy plots
-    ax13.set_xlim((t[0], t[-1]))
+    # fig3, ax13 = fancy_plots_1()
+    # ## Axis definition necesary to fancy plots
+    # ax13.set_xlim((t[0], t[-1]))
 
-    time_1, = ax13.plot(t[0:delta_t.shape[1]],delta_t[0,:],
-                    color='#00429d', lw=2, ls="-")
-    tsam1, = ax13.plot(t[0:t_sample.shape[1]],t_sample[0,:],
-                    color='#9e4941', lw=2, ls="-.")
+    # time_1, = ax13.plot(t[0:delta_t.shape[1]],delta_t[0,:],
+    #                 color='#00429d', lw=2, ls="-")
+    # tsam1, = ax13.plot(t[0:t_sample.shape[1]],t_sample[0,:],
+    #                 color='#9e4941', lw=2, ls="-.")
 
-    ax13.set_ylabel(r"$[s]$", rotation='vertical')
-    ax13.set_xlabel(r"$\textrm{Time}[s]$", labelpad=5)
-    ax13.legend([time_1,tsam1],
-            [r'$t_{compute}$',r'$t_{sample}$'],
-            loc="best",
-            frameon=True, fancybox=True, shadow=False, ncol=2,
-            borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
-            borderaxespad=0.3, columnspacing=2)
-    ax13.grid(color='#949494', linestyle='-.', linewidth=0.5)
+    # ax13.set_ylabel(r"$[s]$", rotation='vertical')
+    # ax13.set_xlabel(r"$\textrm{Time}[s]$", labelpad=5)
+    # ax13.legend([time_1,tsam1],
+    #         [r'$t_{compute}$',r'$t_{sample}$'],
+    #         loc="best",
+    #         frameon=True, fancybox=True, shadow=False, ncol=2,
+    #         borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
+    #         borderaxespad=0.3, columnspacing=2)
+    # ax13.grid(color='#949494', linestyle='-.', linewidth=0.5)
 
-    fig3.savefig("time.eps")
-    fig3.savefig("time.png")
-    fig3
-    #plt.show()
+    # fig3.savefig("time.eps")
+    # fig3.savefig("time.png")
+    # fig3
+    # #plt.show()
 
     print(f'Mean iteration time with MLP Model: {1000*np.mean(delta_t):.1f}ms -- {1/np.mean(delta_t):.0f}Hz)')
 
@@ -744,12 +828,12 @@ if __name__ == '__main__':
 
         odometry_topic = "/dji_sdk/odometry"
         velocity_subscriber = rospy.Subscriber(odometry_topic, Odometry, odometry_call_back)
-        vision_sub = rospy.Subscriber("/dji_sdk/visual_servoing/vel/drone_world", Twist, visual_callback, queue_size=10)
+        vision_sub = rospy.Subscriber("/dji_sdk/visual_servoing/vel/drone_world", TwistStamped, visual_callback, queue_size=10)
         RC_sub = rospy.Subscriber("/dji_sdk/rc", Joy, rc_callback, queue_size=10)
         
         velocity_topic = "/m100/velocityControl"
-        velocity_message = Twist()
-        velocity_publisher = rospy.Publisher(velocity_topic, Twist, queue_size=10)
+        velocity_message = TwistStamped()
+        velocity_publisher = rospy.Publisher(velocity_topic, TwistStamped, queue_size=10)
 
         
 

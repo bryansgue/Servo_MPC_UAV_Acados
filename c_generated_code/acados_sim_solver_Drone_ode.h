@@ -37,7 +37,7 @@
 #include "acados_c/sim_interface.h"
 #include "acados_c/external_function_interface.h"
 
-#define DRONE_ODE_NX     8
+#define DRONE_ODE_NX     12
 #define DRONE_ODE_NZ     0
 #define DRONE_ODE_NU     4
 #define DRONE_ODE_NP     0

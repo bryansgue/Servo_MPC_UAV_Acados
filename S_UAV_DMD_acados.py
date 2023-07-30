@@ -229,15 +229,17 @@ def f_system_model():
     b = 0
     J = calc_J(x, a, b)
 
-    A = np.array([[-1.4692, 0.1134, -0.9113, 0.6233],
-          [0.3882, -1.2124, -1.0155, 0.8786],
-          [0.0026, -0.0166, -3.2147, 0.2079],
-          [-0.0261, -0.0317, -0.5068, -5.4358]])
+    # Definir la matriz A
+    A = np.array([[-1.5105, 0.4017, 1.7112, -0.1643],
+              [0.9038, -0.7523, -1.4176, -0.2979],
+              [-0.7307, 0.3331, -0.7422, -0.2671],
+              [-0.0582, 0.1306, 0.2789, -2.4667]])
 
-    B = np.array([[2.3499, 0.0035, 1.0635, -0.0676],
-          [-0.2289, 1.7269, 0.6634, -0.7431],
-          [0.0027, 0.0203, 3.2273, -0.1985],
-          [0.0077, 0.0943, 0.4583, 5.2311]])
+    # Definir la matriz B
+    B = np.array([[1.9717, -0.5415, -1.5929, -0.0495],
+              [-0.2361, 1.3144, 0.8441, 0.3255],
+              [0.7182, -0.2532, 0.9526, 0.1146],
+              [-0.5441, -0.4366, 0.1335, 2.6097]])
     
     # Crear matriz A
     A_top = horzcat(MX.zeros(4, 4), J)
@@ -290,9 +292,9 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
     ocp.dims.N = N_horizon
 
     # set cost
-    Q_mat = 2.5 * np.diag([0, 0, 0, 0, 1, 1, 1, 1])  # [x,th,dx,dth]
-    #R_mat = 1* np.diag([1*(1/ul_max),  1*(1/um_max), (1/un_max), (1/w_max)])
-    R_mat = 0.5 * np.diag([1,  1, 1, 1])
+    Q_mat = 1 * np.diag([0, 0, 0, 0, 2, 0.5, 1, 0.1])  # [x,th,dx,dth]
+    #R_mat = np.diag([1*(1/ul_max),  1*(1/um_max), 1*(1/un_max), 1*(1/w_max)])
+    R_mat = 0.3 * np.diag([1,  1, 1, 1])
 
 
     ocp.cost.cost_type = "LINEAR_LS"
@@ -335,10 +337,10 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
 
     # set options
     ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"  # FULL_CONDENSING_QPOASES
-    ocp.solver_options.hessian_approx = "GAUSS_NEWTON"  # 'GAUSS_NEWTON', 'EXACT'
+    ocp.solver_options.hessian_approx = "EXACT"  # 'GAUSS_NEWTON', 'EXACT'
     ocp.solver_options.integrator_type = "ERK"
-    ocp.solver_options.nlp_solver_type = "SQP_RTI"  # SQP_RTI, SQP
-    ocp.solver_options.tol = 1e-4
+    ocp.solver_options.nlp_solver_type = "SQP"  # SQP_RTI, SQP
+    ocp.solver_options.tol = 1e-6
 
     # set prediction horizon
     ocp.solver_options.tf = t_horizon
