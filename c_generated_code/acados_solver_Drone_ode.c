@@ -351,7 +351,7 @@ void Drone_ode_acados_create_5_set_nlp_in(Drone_ode_solver_capsule* capsule, con
     if (new_time_steps) {
         Drone_ode_acados_update_time_steps(capsule, N, new_time_steps);
     } else {// all time_steps are identical
-        double time_step = 0.032051282051282055;
+        double time_step = 0.03125;
         for (int i = 0; i < N; i++)
         {
             ocp_nlp_in_set(nlp_config, nlp_dims, nlp_in, i, "Ts", &time_step);
@@ -504,6 +504,8 @@ void Drone_ode_acados_create_5_set_nlp_in(Drone_ode_solver_capsule* capsule, con
     double* lbx0 = lubx0;
     double* ubx0 = lubx0 + NBX0;
     // change only the non-zero elements:
+    lbx0[2] = 2.5;
+    ubx0[2] = 2.5;
 
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "idxbx", idxbx0);
     ocp_nlp_constraints_model_set(nlp_config, nlp_dims, nlp_in, 0, "lbx", lbx0);
@@ -569,8 +571,8 @@ void Drone_ode_acados_create_5_set_nlp_in(Drone_ode_solver_capsule* capsule, con
     double* lbx = lubx;
     double* ubx = lubx + NBX;
     
-    lbx[0] = 2.5;
-    ubx[0] = 50;
+    lbx[0] = 2;
+    ubx[0] = 20;
 
     for (int i = 1; i < N; i++)
     {
@@ -691,6 +693,7 @@ void Drone_ode_acados_create_7_set_nlp_out(Drone_ode_solver_capsule* capsule)
 
     // initialize with x0
     
+    x0[2] = 2.5;
 
 
     double* u0 = xu0 + NX;

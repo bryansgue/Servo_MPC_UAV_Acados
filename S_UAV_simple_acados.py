@@ -31,7 +31,7 @@ from std_msgs.msg import Header
 # Global variables Odometry Drone
 x_real = 0.0
 y_real = 0.0
-z_real = 0.0
+z_real = 2.5
 vx_real = 0.0
 vy_real = 0.0
 vz_real = 0.0
@@ -336,8 +336,8 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
 
    # Restricciones de z
     # Restricciones de x
-    zmin=2.5
-    zmax=50
+    zmin=2
+    zmax=20
     ocp.constraints.lbx = np.array([zmin])
     ocp.constraints.ubx = np.array([zmax])
     ocp.constraints.idxbx = np.array([2])
@@ -472,7 +472,7 @@ def main(vel_pub, vel_msg):
     frec= 30
     t_s = 1/frec
     # Prediction Time
-    N_horizont = 50
+    N_horizont = 30
     t_prediction = N_horizont/frec
 
     # Nodes inside MPC
