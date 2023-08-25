@@ -107,19 +107,19 @@ def calc_M(chi, a, b, x):
     M[0,0] = chi[0]
     M[0,1] = 0
     M[0,2] = 0
-    M[0,3] = a * w * chi[1]
+    M[0,3] = b * chi[1]
     M[1,0] = 0
     M[1,1] = chi[2]
     M[1,2] = 0
-    M[1,3] = b * w * chi[3]
+    M[1,3] = a* chi[3]
     M[2,0] = 0
     M[2,1] = 0
     M[2,2] = chi[4]
     M[2,3] = 0
-    M[3,0] = a * w * chi[5]
-    M[3,1] = b * w * chi[6]
+    M[3,0] = b*chi[5]
+    M[3,1] = a* chi[6]
     M[3,2] = 0
-    M[3,3] = chi[7]
+    M[3,3] = chi[7]*(a**2+b**2) + chi[8]
     
     return M
 
@@ -127,22 +127,22 @@ def calc_C(chi, a, b, x):
     w = x[7]
 
     C = MX.zeros(4, 4)
-    C[0,0] = chi[8]
-    C[0,1] = 0
+    C[0,0] = chi[9]
+    C[0,1] = w*chi[10]
     C[0,2] = 0
-    C[0,3] = a * w * chi[9]
-    C[1,0] = 0
-    C[1,1] = chi[10]
+    C[0,3] = a * w * chi[11]
+    C[1,0] = w*chi[12]
+    C[1,1] = chi[13]
     C[1,2] = 0
-    C[1,3] = b * w * chi[11]
+    C[1,3] = b * w * chi[14]
     C[2,0] = 0
     C[2,1] = 0
-    C[2,2] = chi[12]
+    C[2,2] = chi[15]
     C[2,3] = 0
-    C[3,0] = b * (w ** 2) * chi[13]
-    C[3,1] = a * (w ** 2) * chi[14]
+    C[3,0] = a *w* chi[16]
+    C[3,1] = b * w * chi[17]
     C[3,2] = 0
-    C[3,3] = (a ** 2) * (w ** 2) * chi[15] + (b ** 2) * (w ** 2) * chi[16] + chi[17]
+    C[3,3] = chi[18]
 
     return C
 
@@ -161,6 +161,19 @@ def calc_J(x, a, b):
     psi = x[3]
 
     RotZ = MX.zeros(4, 4)
+
+    #J = np.zeros((3, 3))
+    #J[0, 0] =  np.cos(psi)*np.cos(theta)
+    #J[0, 1] = np.cos(psi)*np.sin(phi)*np.sin(theta) - np.cos(phi)*np.sin(psi)
+    #J[0, 2] = np.sin(phi)*np.sin(psi) + np.cos(phi)*np.cos(psi)*np.sin(theta)
+    #J[1, 0] = np.cos(theta)*np.sin(psi)
+    #J[1, 1] = np.cos(phi)*np.cos(psi) + np.sin(phi)*np.sin(psi)*np.sin(theta)
+    #J[1, 2] = np.cos(phi)*np.sin(psi)*np.sin(theta) - np.cos(psi)*np.sin(phi)
+    #J[2, 0] =  -np.sin(theta)
+    #J[2, 1] =  np.cos(theta)*np.sin(phi)
+    #J[2, 2] =  np.cos(phi)*np.cos(theta) 
+
+
     RotZ[0, 0] = cos(psi)
     RotZ[0, 1] = -sin(psi)
     RotZ[0, 2] = 0
@@ -187,10 +200,7 @@ def f_system_model():
     model_name = 'Drone_ode'
     # Dynamic Values of the system
 
-    chi = [    0.3259,         0,    0.3788,         0,    0.4144,         0,         0,    0.2295,    0.7623,         0, 0.8278,         0,    0.8437,         0,         0,         0,         0,    1.0390]
-
-    # set up states & controls
-    # Position
+    chi = [0.6756,    1.0000,    0.6344,    1.0000,    0.4080,    1.0000,    1.0000,    1.0000,    0.2953,    0.5941,   -0.8109,    1.0000,    0.3984,    0.7040,    1.0000,    0.9365,    1.0000, 1.0000,    0.9752]# Position
     nx = MX.sym('nx') 
     ny = MX.sym('ny')
     nz = MX.sym('nz')
@@ -287,9 +297,11 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
     ocp.dims.N = N_horizon
 
     # set cost
-    Q_mat = 1 * np.diag([0, 0, 0, 0, 1.5, 1.5, 0.8, 0.5])  # [x,th,dx,dth]
-    R_mat = 0.4* np.diag([1*(1/ul_max),  1*(1/um_max), (1/un_max), (1/w_max)])
-    #R_mat = 0.01 * np.diag([1,  1, 1, 1])
+    Q_mat = 1 * np.diag([0, 0, 0, 0, 1, 1, 1, 1])  # [x,th,dx,dth]
+    R_mat = 1.3* np.diag([1*(1/ul_max),  1*(1/um_max), (1/un_max), (1/w_max)])
+  
+   
+    
 
 
     ocp.cost.cost_type = "LINEAR_LS"
@@ -325,7 +337,7 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
    # Restricciones de z
     # Restricciones de x
     zmin=2.5
-    zmax=5
+    zmax=50
     ocp.constraints.lbx = np.array([zmin])
     ocp.constraints.ubx = np.array([zmax])
     ocp.constraints.idxbx = np.array([2])
@@ -350,18 +362,21 @@ def get_odometry_simple():
     quaternion = [qx_real, qy_real, qz_real, qw_real ]
     r_quat = R.from_quat(quaternion)
     euler =  r_quat.as_euler('zyx', degrees = False)
+    phi = euler[2]
+    theta = euler[1]
     psi = euler[0]
 
     J = np.zeros((3, 3))
-    J[0, 0] = np.cos(psi)
-    J[0, 1] = -np.sin(psi)
-    J[0, 2] = 0
-    J[1, 0] = np.sin(psi)
-    J[1, 1] = np.cos(psi)
-    J[1, 2] = 0
-    J[2, 0] = 0
-    J[2, 1] = 0
-    J[2, 2] = 1
+    J[0, 0] =  np.cos(psi)*np.cos(theta)
+    J[0, 1] = np.cos(psi)*np.sin(phi)*np.sin(theta) - np.cos(phi)*np.sin(psi)
+    J[0, 2] = np.sin(phi)*np.sin(psi) + np.cos(phi)*np.cos(psi)*np.sin(theta)
+    J[1, 0] = np.cos(theta)*np.sin(psi)
+    J[1, 1] = np.cos(phi)*np.cos(psi) + np.sin(phi)*np.sin(psi)*np.sin(theta)
+    J[1, 2] = np.cos(phi)*np.sin(psi)*np.sin(theta) - np.cos(psi)*np.sin(phi)
+    J[2, 0] =  -np.sin(theta)
+    J[2, 1] =  np.cos(theta)*np.sin(phi)
+    J[2, 2] =  np.cos(phi)*np.cos(theta) 
+
 
     J_inv = np.linalg.inv(J)
     v = np.dot(J_inv, [vx_real, vy_real, vz_real])
@@ -487,10 +502,10 @@ def main(vel_pub, vel_msg):
     #u_control = np.zeros((4, t.shape[0]), dtype = np.double)
 
     # Limits Control values
-    ul_max = 2
-    um_max = 2
-    un_max = 2
-    w_max = 2
+    ul_max = 5
+    um_max = 5
+    un_max = 5
+    w_max = 5
 
     ul_min = -ul_max
     um_min = -um_max
@@ -534,18 +549,18 @@ def main(vel_pub, vel_msg):
         
         condicion = axes[5]
         if condicion  == -4545.0:
-            xref[4,k:] = axes[0]
-            xref[5,k:] = axes[1]
-            xref[6,k:] = axes[3]
-            xref[7,k:] = axes[2]
+            xref[4,k:] = 1.175*axes[0]
+            xref[5,k:] = 1.175*axes[1]
+            xref[6,k:] = 1.175*axes[3]
+            xref[7,k:] = 1.175*axes[2]
             #print("RC")
             #print("RC:", " ".join("{:.2f}".format(value) for value in np.round(xref[4:7, k], decimals=2)), end='\r')
 
         elif condicion == -10000.0:        
-            xref[4,k:] = hdp_vision[0]
-            xref[5,k:] = hdp_vision[1]
-            xref[6,k:] = hdp_vision[2]
-            xref[7,k:] = hdp_vision[5]
+            xref[4,k:] = 1.175*hdp_vision[0]
+            xref[5,k:] = 1.175*hdp_vision[1]
+            xref[6,k:] = 1.175*hdp_vision[2]
+            xref[7,k:] = 1.175*hdp_vision[5]
             #print("Servo-Visual:", " ".join("{:.2f}".format(value) for value in np.round(xref[4:7, k], decimals=2)), end='\r')
         
         else:

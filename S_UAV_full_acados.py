@@ -654,7 +654,7 @@ def main(vel_pub, vel_msg):
             xref[7,k:] = axes[1]
             xref[8,k:] = axes[3]
             aux_angle = x[5, k]
-            xref[5,k:] = aux_yaw_d[:,k]
+            xref[5,k:] = axes[2]
 
             aux_yaw_d[:,k+1] = Angulo(axes[2] * t_s*0.5 + aux_yaw_d[:,k])
             
