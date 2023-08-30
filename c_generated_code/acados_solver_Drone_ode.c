@@ -351,7 +351,7 @@ void Drone_ode_acados_create_5_set_nlp_in(Drone_ode_solver_capsule* capsule, con
     if (new_time_steps) {
         Drone_ode_acados_update_time_steps(capsule, N, new_time_steps);
     } else {// all time_steps are identical
-        double time_step = 0.03125;
+        double time_step = 0.0303030303030303;
         for (int i = 0; i < N; i++)
         {
             ocp_nlp_in_set(nlp_config, nlp_dims, nlp_in, i, "Ts", &time_step);
@@ -386,26 +386,26 @@ void Drone_ode_acados_create_5_set_nlp_in(Drone_ode_solver_capsule* capsule, con
     free(yref_e);
    double* W_0 = calloc(NY0*NY0, sizeof(double));
     // change only the non-zero elements:
-    W_0[4+(NY0) * 4] = 1;
+    W_0[4+(NY0) * 4] = 1.3;
     W_0[5+(NY0) * 5] = 1;
     W_0[6+(NY0) * 6] = 1;
     W_0[7+(NY0) * 7] = 1;
-    W_0[8+(NY0) * 8] = 0.26;
-    W_0[9+(NY0) * 9] = 0.26;
-    W_0[10+(NY0) * 10] = 0.26;
-    W_0[11+(NY0) * 11] = 0.26;
+    W_0[8+(NY0) * 8] = 0.27999999999999997;
+    W_0[9+(NY0) * 9] = 0.27999999999999997;
+    W_0[10+(NY0) * 10] = 0.27999999999999997;
+    W_0[11+(NY0) * 11] = 0.27999999999999997;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
     free(W_0);
     double* W = calloc(NY*NY, sizeof(double));
     // change only the non-zero elements:
-    W[4+(NY) * 4] = 1;
+    W[4+(NY) * 4] = 1.3;
     W[5+(NY) * 5] = 1;
     W[6+(NY) * 6] = 1;
     W[7+(NY) * 7] = 1;
-    W[8+(NY) * 8] = 0.26;
-    W[9+(NY) * 9] = 0.26;
-    W[10+(NY) * 10] = 0.26;
-    W[11+(NY) * 11] = 0.26;
+    W[8+(NY) * 8] = 0.27999999999999997;
+    W[9+(NY) * 9] = 0.27999999999999997;
+    W[10+(NY) * 10] = 0.27999999999999997;
+    W[11+(NY) * 11] = 0.27999999999999997;
 
     for (int i = 1; i < N; i++)
     {
@@ -414,7 +414,7 @@ void Drone_ode_acados_create_5_set_nlp_in(Drone_ode_solver_capsule* capsule, con
     free(W);
     double* W_e = calloc(NYN*NYN, sizeof(double));
     // change only the non-zero elements:
-    W_e[4+(NYN) * 4] = 1;
+    W_e[4+(NYN) * 4] = 1.3;
     W_e[5+(NYN) * 5] = 1;
     W_e[6+(NYN) * 6] = 1;
     W_e[7+(NYN) * 7] = 1;
