@@ -336,7 +336,7 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
    # Restricciones de z
     # Restricciones de x
     zmin=2
-    zmax=20
+    zmax=4.5
     ocp.constraints.lbx = np.array([zmin])
     ocp.constraints.ubx = np.array([zmax])
     ocp.constraints.idxbx = np.array([2])
