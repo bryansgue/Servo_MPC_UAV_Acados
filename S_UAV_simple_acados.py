@@ -297,7 +297,7 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
     ocp.dims.N = N_horizon
 
     # set cost
-    Q_mat = 1 * np.diag([0, 0, 0, 0, 1.3, 1, 1, 1])  # [x,th,dx,dth]
+    Q_mat = 1 * np.diag([0, 0, 0, 0, 1, 1, 1, 1])  # [x,th,dx,dth]
     R_mat = 1.3* np.diag([1*(1/ul_max),  1*(1/um_max), (1/un_max), (1/w_max)])
   
     
