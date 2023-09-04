@@ -351,7 +351,7 @@ void Drone_ode_acados_create_5_set_nlp_in(Drone_ode_solver_capsule* capsule, con
     if (new_time_steps) {
         Drone_ode_acados_update_time_steps(capsule, N, new_time_steps);
     } else {// all time_steps are identical
-        double time_step = 0.03278688524590164;
+        double time_step = 0.03125;
         for (int i = 0; i < N; i++)
         {
             ocp_nlp_in_set(nlp_config, nlp_dims, nlp_in, i, "Ts", &time_step);
@@ -386,25 +386,25 @@ void Drone_ode_acados_create_5_set_nlp_in(Drone_ode_solver_capsule* capsule, con
     free(yref_e);
    double* W_0 = calloc(NY0*NY0, sizeof(double));
     // change only the non-zero elements:
-    W_0[6+(NY0) * 6] = 1;
-    W_0[7+(NY0) * 7] = 1;
-    W_0[8+(NY0) * 8] = 2;
-    W_0[11+(NY0) * 11] = 1;
-    W_0[12+(NY0) * 12] = 0.003;
-    W_0[13+(NY0) * 13] = 3;
-    W_0[14+(NY0) * 14] = 3;
+    W_0[6+(NY0) * 6] = 0.25;
+    W_0[7+(NY0) * 7] = 0.25;
+    W_0[8+(NY0) * 8] = 0.5;
+    W_0[11+(NY0) * 11] = 0.5;
+    W_0[12+(NY0) * 12] = 0.30000000000000004;
+    W_0[13+(NY0) * 13] = 9;
+    W_0[14+(NY0) * 14] = 9;
     W_0[15+(NY0) * 15] = 0.75;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, 0, "W", W_0);
     free(W_0);
     double* W = calloc(NY*NY, sizeof(double));
     // change only the non-zero elements:
-    W[6+(NY) * 6] = 1;
-    W[7+(NY) * 7] = 1;
-    W[8+(NY) * 8] = 2;
-    W[11+(NY) * 11] = 1;
-    W[12+(NY) * 12] = 0.003;
-    W[13+(NY) * 13] = 3;
-    W[14+(NY) * 14] = 3;
+    W[6+(NY) * 6] = 0.25;
+    W[7+(NY) * 7] = 0.25;
+    W[8+(NY) * 8] = 0.5;
+    W[11+(NY) * 11] = 0.5;
+    W[12+(NY) * 12] = 0.30000000000000004;
+    W[13+(NY) * 13] = 9;
+    W[14+(NY) * 14] = 9;
     W[15+(NY) * 15] = 0.75;
 
     for (int i = 1; i < N; i++)
@@ -414,10 +414,10 @@ void Drone_ode_acados_create_5_set_nlp_in(Drone_ode_solver_capsule* capsule, con
     free(W);
     double* W_e = calloc(NYN*NYN, sizeof(double));
     // change only the non-zero elements:
-    W_e[6+(NYN) * 6] = 1;
-    W_e[7+(NYN) * 7] = 1;
-    W_e[8+(NYN) * 8] = 2;
-    W_e[11+(NYN) * 11] = 1;
+    W_e[6+(NYN) * 6] = 0.25;
+    W_e[7+(NYN) * 7] = 0.25;
+    W_e[8+(NYN) * 8] = 0.5;
+    W_e[11+(NYN) * 11] = 0.5;
     ocp_nlp_cost_model_set(nlp_config, nlp_dims, nlp_in, N, "W", W_e);
     free(W_e);
     double* Vx_0 = calloc(NY0*NX, sizeof(double));
@@ -590,7 +590,7 @@ void Drone_ode_acados_create_5_set_nlp_in(Drone_ode_solver_capsule* capsule, con
     double* ubx = lubx + NBX;
     
     lbx[0] = 1.5;
-    ubx[0] = 8;
+    ubx[0] = 50;
 
     for (int i = 1; i < N; i++)
     {

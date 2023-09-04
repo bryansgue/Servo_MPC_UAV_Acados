@@ -19,6 +19,7 @@ from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import Joy
 import math
+import scipy.io
 
 from geometry_msgs.msg import TwistStamped
 
@@ -203,9 +204,18 @@ def f_system_model():
     model_name = 'Drone_ode'
     # Dynamic Values of the system
     g = 9.81
-    #chi = [1.05833614147124e-08, 1.71991420525648e-08, 1.18746744226948e-08, 5.75996411364598e-08, 6.16080761085103e-08, 1.49712137729156e-06, 8.42430756632765e-07, 1.34018154831176e-06, 1.33788423506417e-06, 7.32461559124120e-07, 1.30714877460439e-06, 6.07978755974178e-08, 3.08456881692582e-07, 1.79780921983864e-07, 4.25094296520110e-07, 6.08414838608068e-08]
     
-    chi = [5.3e-07, 9.4e-07, 3.8e-07, 6.4e-07, 8.05e-06, 0.0002241, 0.0001181, 2.83e-05, 0.0002204, 0.0001103, 7.9e-05, 6.06e-05, 2.36e-05, 1.79e-05, 3.65e-05, 4.4e-06]
+    # Carga el archivo .mat
+    mat = scipy.io.loadmat('chi_uav_model.mat')
+
+    # Accede a la variable 'values_final'
+    values_final = mat['values_final']
+
+    # Convierte la matriz en un vector de nx1
+    chi = np.reshape(values_final, (-1, 1))
+
+    #chi = [5.3e-07, 9.4e-07, 3.8e-07, 6.4e-07, 8.05e-06, 0.0002241, 0.0001181, 2.83e-05, 0.0002204, 0.0001103, 7.9e-05, 6.06e-05, 2.36e-05, 1.79e-05, 3.65e-05, 4.4e-06]
+    
     m = chi[0]
 
     # set up states & controls
@@ -271,11 +281,7 @@ def f_system_model():
 
 
     # Auxiliar Matrices 
-    R_t = MX.zeros(6, 6)
-    R_t[0:3, 0:3] = R@T[0:3, 0:3]
-    R_t[0:3, 3:6] = T[0:3, 3:6]
-    R_t[3:6, 0:3] = T[3:6, 0:3]
-    R_t[3:6, 3:6] = T[3:6, 3:6]
+
 
     # Aux Control
     u_aux = vertcat(0, 0, zp_ref, phi_ref, theta_ref, psi_p_ref)
@@ -285,15 +291,6 @@ def f_system_model():
     #Aux = S@u_aux-Q@x[0:6, 0]-E@x[6:12, 0]+B
     Aux = S@u_aux-Q@q-E@q_p+B
 
-    Aux1 = R@Aux[0:3,0]
-    Aux2 = Aux[3:6,0]
-
-
-
-    # New Input Model
-    Input_model = MX.zeros(6, 1)
-    Input_model[0:3,0] = Aux1
-    Input_model[3:6,0] = Aux2
 
     # Aux inverse Matrix
     M_a_r = M_bar + R_bar@T
@@ -394,15 +391,10 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
     ocp.dims.N = N_horizon
 
     # set cost
-    gain_yaw = 1.2
-    gain_vx = 0.4
-    gain_vy = 0.4
-    gain_vz = 1
-    alpha =3.5
-    beta =3.5
-    gamma =1#            hx hy hz phi theta psi vx  vy  vz  phi_p theta_p  psi_p  
-    Q_mat = 1 * np.diag([0, 0, 0,  0,   0,   0,  1,  1,  2,  0,     0,      1])  # [x,th,dx,dth]
-    R_mat = 1.5 * np.diag([0.01*(1/zp_max),  (1/phi_max), (1/theta_max), (1/psi_p_max)])
+
+        #                  hx hy hz phi theta psi vx  vy  vz  phi_p theta_p  psi_p  
+    Q_mat = 0.5 * np.diag([0, 0, 0,  0,   0,   0,  0.5,  0.5,  1,  0,     0,      1])  # [x,th,dx,dth]
+    R_mat = 1.5 * np.diag([1*(1/zp_max),  3*(1/phi_max), 3*(1/theta_max), (1/psi_p_max)])
 
     ocp.cost.cost_type = "LINEAR_LS"
     ocp.cost.cost_type_e = "LINEAR_LS"
@@ -435,7 +427,7 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
     # Restricciones de z
 
     zmin=1.5
-    zmax=8
+    zmax=50
     ocp.constraints.lbx = np.array([zmin])
     ocp.constraints.ubx = np.array([zmax])
     ocp.constraints.idxbx = np.array([2])
@@ -570,7 +562,7 @@ def main(vel_pub, vel_msg):
     frec= 30
     t_s = 1/frec
     # Prediction Time
-    N_horizont = 60
+    N_horizont = 15
     t_prediction = N_horizont/frec
 
     # Nodes inside MPC
@@ -667,10 +659,9 @@ def main(vel_pub, vel_msg):
             xref[6,k:] = axes[0]
             xref[7,k:] = axes[1]
             xref[8,k:] = axes[3]
-            aux_angle = x[5, k]
-            xref[5,k:] = axes[2]
+            xref[11,k:] = axes[2]
 
-            aux_yaw_d[:,k+1] = Angulo(axes[2] * t_s*0.5 + aux_yaw_d[:,k])
+            
             
             #print(aux_angle) 
             #print("RC:", " ".join("{:.2f}".format(value) for value in np.round(xref[6:11, k], decimals=2)), end='\r')
@@ -688,7 +679,7 @@ def main(vel_pub, vel_msg):
             xref[6,k:] = 0.1
             xref[7,k:] = 0.1
             xref[8,k:] = 0.1
-            xref[11,k:] = 0.1
+            xref[11,k:] = 1
             #print("HERE")
 
 
@@ -732,8 +723,8 @@ def main(vel_pub, vel_msg):
         print()
 
         # System Evolution
-        x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
-        send_state_to_topic(x_sim[:, k+1])
+        #x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
+        #send_state_to_topic(x_sim[:, k+1])
         
         #Simula la odometria real
         
