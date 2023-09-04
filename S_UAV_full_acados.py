@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from casadi import Function
 from casadi import MX
 from casadi import reshape
-from casadi import vertcat
+from casadi import vertcat, horzcat
 from casadi import cos
 from casadi import sin
 from casadi import solve
@@ -174,21 +174,23 @@ def Q_fuction(chi):
     Q = MX.zeros(6, 6)
     Q[3, 3] = chi[8]
     Q[4, 4] = chi[9]
-    Q[5, 5] = chi[10]
+    
     return Q
 
 def E_fuction(chi):
     E = MX.zeros(6, 6)
-    E[2,2] = chi[11];
-    E[3,3] = chi[12];
-    E[4,4] = chi[13];
-    E[5,5] = chi[14];
+    E[2,2] = chi[10]
+    E[3,3] = chi[11]
+    E[4,4] = chi[12]
+    E[5,5] = chi[13]
     return E
 
 def T_fuction(chi):
     E = MX.zeros(6,6)
-    E[2,2] = chi[15]
+    E[2,2] = chi[14]
+    E[5,5] = chi[15]
     return E
+
 def B_fuction(chi):
     m1 = chi[0];
     g = 9.81
@@ -201,7 +203,9 @@ def f_system_model():
     model_name = 'Drone_ode'
     # Dynamic Values of the system
     g = 9.81
-    chi = [1.05833614147124e-08, 1.71991420525648e-08, 1.18746744226948e-08, 5.75996411364598e-08, 6.16080761085103e-08, 1.49712137729156e-06, 8.42430756632765e-07, 1.34018154831176e-06, 1.33788423506417e-06, 7.32461559124120e-07, 1.30714877460439e-06, 6.07978755974178e-08, 3.08456881692582e-07, 1.79780921983864e-07, 4.25094296520110e-07, 6.08414838608068e-08]
+    #chi = [1.05833614147124e-08, 1.71991420525648e-08, 1.18746744226948e-08, 5.75996411364598e-08, 6.16080761085103e-08, 1.49712137729156e-06, 8.42430756632765e-07, 1.34018154831176e-06, 1.33788423506417e-06, 7.32461559124120e-07, 1.30714877460439e-06, 6.07978755974178e-08, 3.08456881692582e-07, 1.79780921983864e-07, 4.25094296520110e-07, 6.08414838608068e-08]
+    
+    chi = [5.3e-07, 9.4e-07, 3.8e-07, 6.4e-07, 8.05e-06, 0.0002241, 0.0001181, 2.83e-05, 0.0002204, 0.0001103, 7.9e-05, 6.06e-05, 2.36e-05, 1.79e-05, 3.65e-05, 4.4e-06]
     m = chi[0]
 
     # set up states & controls
@@ -229,10 +233,10 @@ def f_system_model():
     zp_ref = MX.sym('F')
     phi_ref = MX.sym('ux')
     theta_ref = MX.sym('uy')
-    psi_ref = MX.sym('uz')
+    psi_p_ref = MX.sym('uz')
 
     # General Vector Action variables
-    u = vertcat(zp_ref, phi_ref, theta_ref, psi_ref)
+    u = vertcat(zp_ref, phi_ref, theta_ref, psi_p_ref)
 
     # Variables to explicit function
     x1_dot = MX.sym('x1_dot')
@@ -252,7 +256,7 @@ def f_system_model():
     xdot = vertcat(x1_dot, y1_dot, z1_dot,  phi_dot, theta_dot, psi_dot, dx1_dot, dy1_dot, dz1_dot, dphi_dot, dtheta_dot, dpsi_dot)
 
     # Rotational Matrix
-    R = Rot_zyx(x);
+    R = Rot_zyx(x)
     M_bar = M_matrix_bar(chi, x)
     C_bar = C_matrix_bar(chi, x)
     G_bar = G_matrix_bar(chi, x)
@@ -262,6 +266,10 @@ def f_system_model():
     T = T_fuction(chi)
     B = B_fuction(chi)
 
+
+    R_bar = vertcat(horzcat(R, MX.zeros(3,3)), horzcat(MX.zeros(3,3), MX.eye(3)))
+
+
     # Auxiliar Matrices 
     R_t = MX.zeros(6, 6)
     R_t[0:3, 0:3] = R@T[0:3, 0:3]
@@ -270,12 +278,17 @@ def f_system_model():
     R_t[3:6, 3:6] = T[3:6, 3:6]
 
     # Aux Control
-    u_aux = vertcat(0, 0, zp_ref, phi_ref, theta_ref, psi_ref)
+    u_aux = vertcat(0, 0, zp_ref, phi_ref, theta_ref, psi_p_ref)
+    q = x[0:6, 0]
+    q_p = x[6:12, 0]
 
-    Aux = S@u_aux-Q@x[0:6, 0]-E@x[6:12, 0]+B
+    #Aux = S@u_aux-Q@x[0:6, 0]-E@x[6:12, 0]+B
+    Aux = S@u_aux-Q@q-E@q_p+B
 
     Aux1 = R@Aux[0:3,0]
     Aux2 = Aux[3:6,0]
+
+
 
     # New Input Model
     Input_model = MX.zeros(6, 1)
@@ -283,10 +296,10 @@ def f_system_model():
     Input_model[3:6,0] = Aux2
 
     # Aux inverse Matrix
-    M_a_r = M_bar + R_t
+    M_a_r = M_bar + R_bar@T
     inv_M = inv(M_a_r)
 
-    x_pp = inv_M@(Input_model-C_bar@x[6:12, 0]-G_bar);
+    x_pp = inv_M@(R_bar@Aux-C_bar@x[6:12, 0]-G_bar);
 
     f_expl = MX.zeros(12, 1)
     f_expl[0:6, 0] = x[6:12, 0]
@@ -367,7 +380,7 @@ def visual_callback(msg):
     hdp_vision = [vx_visual, vy_visual, vz_visual, wx_visual, wy_visual, wz_visual]
     
 
-def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_max, phi_min, theta_max, theta_min) -> AcadosOcp:
+def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_max, phi_min, theta_max, theta_min, psi_p_min, psi_p_max) -> AcadosOcp:
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
 
@@ -387,9 +400,9 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
     gain_vz = 1
     alpha =3.5
     beta =3.5
-    gamma =1.5
-    Q_mat = 1 * np.diag([0, 0, 0, 0, 0, gain_yaw, gain_vx, gain_vy, gain_vz, 0.0, 0.0, 0])  # [x,th,dx,dth]
-    R_mat = 1 * np.diag([3.5*(1/zp_max),  alpha*(1/phi_max), beta*(1/theta_max), gamma*(1)])
+    gamma =1#            hx hy hz phi theta psi vx  vy  vz  phi_p theta_p  psi_p  
+    Q_mat = 1 * np.diag([0, 0, 0,  0,   0,   0,  1,  1,  2,  0,     0,      1])  # [x,th,dx,dth]
+    R_mat = 1.5 * np.diag([0.01*(1/zp_max),  (1/phi_max), (1/theta_max), (1/psi_p_max)])
 
     ocp.cost.cost_type = "LINEAR_LS"
     ocp.cost.cost_type_e = "LINEAR_LS"
@@ -413,9 +426,9 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
     ocp.cost.yref_e = np.zeros((ny_e,))
 
     # set constraints
-    ocp.constraints.lbu = np.array([zp_min, phi_min, theta_min])
-    ocp.constraints.ubu = np.array([zp_max, phi_max, theta_max])
-    ocp.constraints.idxbu = np.array([0, 1, 2])
+    ocp.constraints.lbu = np.array([zp_min, phi_min, theta_min, psi_p_min])
+    ocp.constraints.ubu = np.array([zp_max, phi_max, theta_max, psi_p_max])
+    ocp.constraints.idxbu = np.array([0, 1, 2, 3])
 
     ocp.constraints.x0 = x0
 
@@ -592,17 +605,18 @@ def main(vel_pub, vel_msg):
     zp_ref_max = 5
     phi_max = 0.5
     theta_max = 0.5
+    psi_p_ref_max = 2
     
 
     zp_ref_min = -zp_ref_max
     phi_min = -phi_max
     theta_min = -theta_max
-    
+    psi_p_ref_min = -psi_p_ref_max
 
     # Create Optimal problem
     model, f = f_system_model()
 
-    ocp = create_ocp_solver_description(x[:,0], N_prediction, t_prediction, zp_ref_max, zp_ref_min, phi_max, phi_min, theta_max, theta_min)
+    ocp = create_ocp_solver_description(x[:,0], N_prediction, t_prediction, zp_ref_max, zp_ref_min, phi_max, phi_min, theta_max, theta_min, psi_p_ref_min, psi_p_ref_max)
     #acados_ocp_solver = AcadosOcpSolver(ocp, json_file="acados_ocp_" + ocp.model.name + ".json", build= True, generate= True)
 
     solver_json = 'acados_ocp_' + model.name + '.json'
@@ -670,12 +684,12 @@ def main(vel_pub, vel_msg):
             #print("Servo-Visual:", " ".join("{:.2f}".format(value) for value in np.round(xref[6:11, k], decimals=2)), end='\r')
         
         else:
-            xref[5,k:] = x[5, k]
-            xref[6,k:] = 0
-            xref[7,k:] = 0
-            xref[8,k:] = 0
-            xref[11,k:] = 0
-            print("HERE")
+            
+            xref[6,k:] = 0.1
+            xref[7,k:] = 0.1
+            xref[8,k:] = 0.1
+            xref[11,k:] = 0.1
+            #print("HERE")
 
 
         
@@ -718,8 +732,8 @@ def main(vel_pub, vel_msg):
         print()
 
         # System Evolution
-        #x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
-        #send_state_to_topic(x_sim[:, k+1])
+        x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
+        send_state_to_topic(x_sim[:, k+1])
         
         #Simula la odometria real
         
