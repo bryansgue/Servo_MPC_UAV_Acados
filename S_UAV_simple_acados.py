@@ -263,6 +263,20 @@ def f_system_model():
      # Acados Model
     f_impl = xdot - f_expl
 
+    # Ref system as a external value
+    nx_d = MX.sym('nx_d')
+    ny_d = MX.sym('ny_d')
+    nz_d = MX.sym('nz_d')
+    psi_d = MX.sym('psi_d')
+
+    ul_d = MX.sym('ul_d')
+    um_d= MX.sym('um_d')
+    un_d = MX.sym('un_d')
+    w_d = MX.sym('w_d')
+    force = MX.sym('w_d')
+
+    p = vertcat(nx_d, ny_d, nz_d, psi_d, ul_d, um_d, un_d, w_d, force)
+
     model = AcadosModel()
 
     model.f_impl_expr = f_impl
@@ -271,6 +285,7 @@ def f_system_model():
     model.xdot = xdot
     model.u = u
     model.name = model_name
+    model.p = p
 
     return model, f_system
 
@@ -283,12 +298,13 @@ def f_d(x, u, ts, f_sys):
     aux_x = np.array(x[:,0]).reshape((8,))
     return aux_x
 
-def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_max, um_min, un_max, un_min, w_max, w_min) -> AcadosOcp:
+def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_max, um_min, un_max, un_min, w_max, w_min, n, az, z_max) -> AcadosOcp:
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
 
     model, f_system = f_system_model()
     ocp.model = model
+    ocp.p = model.p
     nx = model.x.size()[0]
     nu = model.u.size()[0]
     ny = nx + nu
@@ -296,50 +312,41 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, ul_max, ul_min, um_m
     # set dimensions
     ocp.dims.N = N_horizon
 
-    # set cost
-    Q_mat = 1 * np.diag([0, 0, 0, 0, 1, 1, 1, 1])  # [x,th,dx,dth]
-    R_mat = 1.3* np.diag([1*(1/ul_max),  1*(1/um_max), (1/un_max), (1/w_max)])
-  
-    
 
 
-    ocp.cost.cost_type = "LINEAR_LS"
-    ocp.cost.cost_type_e = "LINEAR_LS"
+    error = ocp.p[0:8] - model.x
+    force_external = ocp.p[8]
 
-    ny = nx + nu
-    ny_e = nx
+    # Get gauss force field
+    z_system = model.x[2]
+    aux_z = ((z_system - z_max)**n)/az
+    value = np.exp(-aux_z)
 
-    ocp.cost.W_e = Q_mat
-    ocp.cost.W = scipy.linalg.block_diag(Q_mat, R_mat)
+    Q_mat = MX.zeros(8, 8)
+    Q_mat[4, 4] = 1.1
+    Q_mat[5, 5] = 1.1
+    Q_mat[6, 6] = 1*(1-force_external)
+    Q_mat[7, 7] = 1.1
 
-    ocp.cost.Vx = np.zeros((ny, nx))
-    ocp.cost.Vx[:nx, :nx] = np.eye(nx)
+    R_mat = MX.zeros(4, 4)
+    R_mat[0, 0] = 1.3*(1/ul_max)
+    R_mat[1, 1] = 1.3*(1/um_max)
+    R_mat[2, 2] = 1.3*(1/un_max)
+    R_mat[3, 3] = 1.3*(1/w_max)
 
-    Vu = np.zeros((ny, nu))
-    Vu[nx : nx + nu, 0:nu] = np.eye(nu)
-    ocp.cost.Vu = Vu
+    ocp.parameter_values = np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 
-    ocp.cost.Vx_e = np.eye(nx)
+    ocp.cost.cost_type = "EXTERNAL"
 
-    ocp.cost.yref = np.zeros((ny,))
-    ocp.cost.yref_e = np.zeros((ny_e,))
+    ocp.model.cost_expr_ext_cost = error.T @ Q_mat @error + model.u.T @ R_mat @ model.u + (5)*value
 
     # set constraints
-    
     ocp.constraints.lbu = np.array([ul_min, um_min, un_min, w_min])
     ocp.constraints.ubu = np.array([ul_max, um_max, un_max, w_max])
     ocp.constraints.idxbu = np.array([0, 1, 2, 3])
 
     ocp.constraints.x0 = x0
 
-
-   # Restricciones de z
-    # Restricciones de x
-    zmin=2
-    zmax=4.5
-    ocp.constraints.lbx = np.array([zmin])
-    ocp.constraints.ubx = np.array([zmax])
-    ocp.constraints.idxbx = np.array([2])
 
     # set options
     ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"  # FULL_CONDENSING_QPOASES
@@ -462,11 +469,17 @@ def get_odometry_simple_sim():
     x_state = [x_real,y_real,z_real,psi,vx_real, vy_real, vz_real, wz_real]
 
     return x_state
+def force_field(x, zd_max, n, az):
+    # Function to evaluate the field respect to and object
+    z = x[2]
+    aux_z = ((z - zd_max)**n)/az
+    value = np.exp(-aux_z)
+    return value
 
 def main(vel_pub, vel_msg):
     # Initial Values System
     # Simulation Time
-    t_final = 60*5
+    t_final = 60
     # Sample time
     frec= 30
     t_s = 1/frec
@@ -481,6 +494,11 @@ def main(vel_pub, vel_msg):
     # Time simulation
     t = np.arange(0, t_final + t_s, t_s)
 
+    # Obstacles gains
+    n = 2
+    az = 0.1
+    z_max = 4.3
+
     # Sample time vector
     delta_t = np.zeros((1, t.shape[0] - N_prediction), dtype=np.double)
     t_sample = t_s*np.ones((1, t.shape[0] - N_prediction), dtype=np.double)
@@ -490,8 +508,14 @@ def main(vel_pub, vel_msg):
     x = np.zeros((8, t.shape[0]+1-N_prediction), dtype = np.double)
     x_sim = np.zeros((8, t.shape[0]+1-N_prediction), dtype = np.double)
 
-   # Read Real data
-    x[:, 0] = get_odometry_simple()
+    for k in range(0, 100):
+        # Read Real data
+        tic = time.time()
+        x[:, 0] = get_odometry_simple()
+        # Loop_rate.sleep()
+        while (time.time() - tic <= t_s):
+                None
+        print("Init System")
 
     # Reference Signal of the system
     xref = np.zeros((12, t.shape[0]), dtype = np.double)
@@ -499,6 +523,8 @@ def main(vel_pub, vel_msg):
     # Initial Control values
     u_control = np.zeros((4, t.shape[0]-N_prediction), dtype = np.double)
     #u_control = np.zeros((4, t.shape[0]), dtype = np.double)
+
+    campo = np.zeros((1, t.shape[0]+1-N_prediction), dtype = np.double)
 
     # Limits Control values
     ul_max = 5
@@ -514,7 +540,7 @@ def main(vel_pub, vel_msg):
     # Create Optimal problem
     model, f = f_system_model()
 
-    ocp = create_ocp_solver_description(x[:,0], N_prediction, t_prediction, ul_max, ul_min, um_max, um_min, un_max, un_min, w_max, w_min)
+    ocp = create_ocp_solver_description(x[:,0], N_prediction, t_prediction, ul_max, ul_min, um_max, um_min, un_max, un_min, w_max, w_min, n, az, z_max)
     #acados_ocp_solver = AcadosOcpSolver(ocp, json_file="acados_ocp_" + ocp.model.name + ".json", build= True, generate= True)
 
     solver_json = 'acados_ocp_' + model.name + '.json'
@@ -541,6 +567,8 @@ def main(vel_pub, vel_msg):
     ros_rate = 30  # Tasa de ROS en Hz
     rate = rospy.Rate(ros_rate)  # Crear un objeto de la clase rospy.Rate
 
+    campo[:, 0] = force_field(x[:, 0], z_max, n, az)
+
     # Simulation System
     for k in range(0, t.shape[0]-N_prediction):
         tic = time.time()
@@ -548,18 +576,18 @@ def main(vel_pub, vel_msg):
         
         condicion = axes[5]
         if condicion  == -4545.0:
-            xref[4,k:] = 1.175*axes[0]
-            xref[5,k:] = 1.175*axes[1]
-            xref[6,k:] = 1.175*axes[3]
-            xref[7,k:] = 1.175*axes[2]
+            xref[4,k:] = 1.575*axes[0]
+            xref[5,k:] = 1.575*axes[1]
+            xref[6,k:] = 1.575*axes[3]
+            xref[7,k:] = 1.575*axes[2]
             #print("RC")
             #print("RC:", " ".join("{:.2f}".format(value) for value in np.round(xref[4:7, k], decimals=2)), end='\r')
 
         elif condicion == -10000.0:        
-            xref[4,k:] = 1.175*hdp_vision[0]
-            xref[5,k:] = 1.175*hdp_vision[1]
-            xref[6,k:] = 1.175*hdp_vision[2]
-            xref[7,k:] = 1.175*hdp_vision[5]
+            xref[4,k:] = 2.075*hdp_vision[0]
+            xref[5,k:] = 2.075*hdp_vision[1]
+            xref[6,k:] = 2.075*hdp_vision[2]
+            xref[7,k:] = 2.075*hdp_vision[5]
             #print("Servo-Visual:", " ".join("{:.2f}".format(value) for value in np.round(xref[4:7, k], decimals=2)), end='\r')
         
         else:
@@ -574,11 +602,15 @@ def main(vel_pub, vel_msg):
         acados_ocp_solver.set(0, "ubx", x[:,k])
 
         # update yref
+        #for j in range(N_prediction):
+            #yref = xref[:,k+j]
+            #acados_ocp_solver.set(j, "yref", yref)
+        #yref_N = xref[:,k+N_prediction]
+        #acados_ocp_solver.set(N_prediction, "yref", yref_N[0:8])
+
         for j in range(N_prediction):
-            yref = xref[:,k+j]
-            acados_ocp_solver.set(j, "yref", yref)
-        yref_N = xref[:,k+N_prediction]
-        acados_ocp_solver.set(N_prediction, "yref", yref_N[0:8])
+            acados_ocp_solver.set(j, "p", np.array([0.0, 0.0, 0.0, 0.0, xref[4,k+j], xref[5,k+j], xref[6,k+j], xref[7,k+j], campo[0, k]]))
+        
 
         # Get Computational Time
         status = acados_ocp_solver.solve()
@@ -598,6 +630,7 @@ def main(vel_pub, vel_msg):
 
         
         x[:, k+1] = get_odometry_simple()
+        campo[:, k+1] = force_field(x[:, k+1], z_max, n, az)
         
         delta_t[:, k] = toc_solver
 
@@ -608,9 +641,6 @@ def main(vel_pub, vel_msg):
         rate.sleep() 
         toc = time.time() - tic 
 
-
-
-        #print(x[5,k]*np.pi/180)
     
     send_velocity_control([0, 0, 0, 0], vel_pub, vel_msg)
 
@@ -623,40 +653,29 @@ def main(vel_pub, vel_msg):
                     color='#69BB51', lw=2, ls="-")
     states_z, = ax11.plot(t[0:x.shape[1]], x[2,:],
                     color='#5189BB', lw=2, ls="-")
-    states_xd, = ax11.plot(t[0:x.shape[1]], xref[0,0:x.shape[1]],
-                    color='#BB5651', lw=2, ls="--")
-    states_yd, = ax11.plot(t[0:x.shape[1]], xref[1,0:x.shape[1]],
-                    color='#69BB51', lw=2, ls="--")
-    states_zd, = ax11.plot(t[0:x.shape[1]], xref[2,0:x.shape[1]],
-                    color='#5189BB', lw=2, ls="--")
 
     ax11.set_ylabel(r"$[states]$", rotation='vertical')
     ax11.set_xlabel(r"$[t]$", labelpad=5)
-    ax11.legend([states_x, states_y, states_z, states_xd, states_yd, states_zd],
-            [r'$x$', r'$y$', r'$z$', r'$x_d$', r'$y_d$', r'$z_d$'],
+    ax11.legend([states_x, states_y, states_z],
+            [r'$x$', r'$y$', r'$z$'],
             loc="best",
             frameon=True, fancybox=True, shadow=False, ncol=2,
             borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
             borderaxespad=0.3, columnspacing=2)
     ax11.grid(color='#949494', linestyle='-.', linewidth=0.5)
 
-    #fig1.savefig("states_xyz.eps")
     fig1.savefig("states_xyz.png")
     fig1
 
 
     fig2, ax12 = fancy_plots_1()
-    states_phi, = ax12.plot(t[0:x.shape[1]], x[3,:],
+    campo_p, = ax12.plot(t[0:x.shape[1]], campo[0,:],
                     color='#BB5651', lw=2, ls="-")
-    states_theta, = ax12.plot(t[0:x.shape[1]], x[4,:],
-                    color='#69BB51', lw=2, ls="-")
-    states_psi, = ax12.plot(t[0:x.shape[1]], x[5,:],
-                    color='#5189BB', lw=2, ls="-")
 
     ax12.set_ylabel(r"$[states]$", rotation='vertical')
     ax12.set_xlabel(r"$[t]$", labelpad=5)
-    ax12.legend([states_phi, states_theta, states_psi],
-            [r'$\phi$', r'$\theta$', r'$\psi$'],
+    ax12.legend([campo_p],
+            [r'$f$'],
             loc="best",
             frameon=True, fancybox=True, shadow=False, ncol=2,
             borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
@@ -664,7 +683,7 @@ def main(vel_pub, vel_msg):
     ax12.grid(color='#949494', linestyle='-.', linewidth=0.5)
 
     #fig2.savefig("states_angles.eps")
-    fig2.savefig("states_angles.png")
+    fig2.savefig("force.png")
     fig2
 
 
@@ -687,32 +706,6 @@ def main(vel_pub, vel_msg):
             borderaxespad=0.3, columnspacing=2)
     ax13.grid(color='#949494', linestyle='-.', linewidth=0.5)
 
-    #fig3.savefig("time.eps")
-    fig3.savefig("time.png")
-    fig3
-
-    fig4, ax14 = fancy_plots_1()
-    errors_x, = ax14.plot(t[0:Ex.shape[1]], Ex[0,:],
-                    color='#BB5651', lw=2, ls="-")
-    errors_y, = ax14.plot(t[0:Ex.shape[1]], Ey[0,:],
-                    color='#69BB51', lw=2, ls="-")
-    errors_z, = ax14.plot(t[0:Ex.shape[1]], Ez[0,:],
-                    color='#5189BB', lw=2, ls="-")
-
-    ax14.set_ylabel(r"$[Errors]$", rotation='vertical')
-    ax14.set_xlabel(r"$[t]$", labelpad=5)
-    ax14.legend([errors_x, errors_y, errors_z],
-            [r'$\tilde{h}_x$', r'$\tilde{h}_y$', r'$\tilde{h}_z$'],
-            loc="best",
-            frameon=True, fancybox=True, shadow=False, ncol=2,
-            borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
-            borderaxespad=0.3, columnspacing=2)
-    ax14.grid(color='#949494', linestyle='-.', linewidth=0.5)
-
-    #fig4.savefig("errors.eps")
-    fig4.savefig("errors_pos.png")
-    fig4
-  
 
     print(f'Mean iteration time with MLP Model: {1000*np.mean(delta_t):.1f}ms -- {1/np.mean(delta_t):.0f}Hz)')
 
