@@ -584,10 +584,10 @@ def main(vel_pub, vel_msg):
             #print("RC:", " ".join("{:.2f}".format(value) for value in np.round(xref[4:7, k], decimals=2)), end='\r')
 
         elif condicion == -10000.0:        
-            xref[4,k:] = 2.075*hdp_vision[0]
-            xref[5,k:] = 2.075*hdp_vision[1]
-            xref[6,k:] = 2.075*hdp_vision[2]
-            xref[7,k:] = 2.075*hdp_vision[5]
+            xref[4,k:] = 1.575*hdp_vision[0]
+            xref[5,k:] = 1.575*hdp_vision[1]
+            xref[6,k:] = 1.575*hdp_vision[2]
+            xref[7,k:] = 1.575*hdp_vision[5]
             #print("Servo-Visual:", " ".join("{:.2f}".format(value) for value in np.round(xref[4:7, k], decimals=2)), end='\r')
         
         else:
