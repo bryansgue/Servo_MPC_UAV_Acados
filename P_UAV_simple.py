@@ -125,8 +125,8 @@ def main(pub_control,pub_config):
     #yd = lambda t: 5 * np.sin(0.08 * t) + 0.1
     #zd = lambda t: 1 * np.sin(0.08 * t) + 2
 
-    xd = lambda t: np.full_like(t, 0)
-    yd = lambda t: np.full_like(t, 0)
+    xd = lambda t: np.full_like(t, 0.6)
+    yd = lambda t: np.full_like(t, 0.3)
     zd = lambda t: np.full_like(t, 3.5)
 
     xdp = lambda t: 5 * 0.04 * np.cos(0.04 * t)
