@@ -43,7 +43,6 @@ extern "C" {
 #define casadi_s1 CASADI_PREFIX(s1)
 #define casadi_s10 CASADI_PREFIX(s10)
 #define casadi_s11 CASADI_PREFIX(s11)
-#define casadi_s12 CASADI_PREFIX(s12)
 #define casadi_s2 CASADI_PREFIX(s2)
 #define casadi_s3 CASADI_PREFIX(s3)
 #define casadi_s4 CASADI_PREFIX(s4)
@@ -344,12 +343,11 @@ static const casadi_int casadi_s7[10] = {6, 1, 0, 6, 0, 1, 2, 3, 4, 5};
 static const casadi_int casadi_s8[15] = {1, 6, 0, 1, 2, 3, 4, 5, 6, 0, 0, 0, 0, 0, 0};
 static const casadi_int casadi_s9[16] = {12, 1, 0, 12, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
 static const casadi_int casadi_s10[8] = {4, 1, 0, 4, 0, 1, 2, 3};
-static const casadi_int casadi_s11[3] = {0, 0, 0};
-static const casadi_int casadi_s12[20] = {16, 1, 0, 16, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+static const casadi_int casadi_s11[20] = {16, 1, 0, 16, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 
 static const casadi_real casadi_c0[36] = {1., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 1., 0., 0., 0., 0., 0., 0., 1.};
 
-/* Drone_ode_expl_vde_adj:(i0[12],i1[12],i2[4],i3[])->(o0[16]) */
+/* Drone_ode_expl_vde_adj:(i0[12],i1[12],i2[4],i3[16])->(o0[16]) */
 static int casadi_f0(const casadi_real** arg, casadi_real** res, casadi_int* iw, casadi_real* w, int mem) {
   casadi_int i, j, k;
   casadi_real *rr, *ss, *tt;
@@ -3884,7 +3882,7 @@ CASADI_SYMBOL_EXPORT const casadi_int* Drone_ode_expl_vde_adj_sparsity_in(casadi
 
 CASADI_SYMBOL_EXPORT const casadi_int* Drone_ode_expl_vde_adj_sparsity_out(casadi_int i) {
   switch (i) {
-    case 0: return casadi_s12;
+    case 0: return casadi_s11;
     default: return 0;
   }
 }

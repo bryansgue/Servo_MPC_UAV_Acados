@@ -75,7 +75,7 @@ def rc_callback(data):
                 [0, 0, 0, 0, 0, 1]])
     
     axes = R@axes_aux
-
+    
 def odometry_call_back(odom_msg):
     global x_real, y_real, z_real, qx_real, qy_real, qz_real, qw_real, vx_real, vy_real, vz_real, wx_real, wy_real, wz_real
     # Read desired linear velocities from node

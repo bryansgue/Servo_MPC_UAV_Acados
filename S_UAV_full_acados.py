@@ -26,18 +26,18 @@ from geometry_msgs.msg import TwistStamped
 #from c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
 
 # Global variables Odometry Drone Condicion inicial
-x_real = 0.0
-y_real = 0.0
+x_real = 3
+y_real = 3
 z_real = 2
 vx_real = 0.0
 vy_real = 0.0
 vz_real = 0.0
 
 # Angular velocities
-qx_real = 0.0005
+qx_real = 0
 qy_real = 0.0
-qz_real = 0.1986693
-qw_real = 0.98800666
+qz_real = 0
+qw_real = 1
 wx_real = 0.0
 wy_real = 0.0
 wz_real = 0.0
@@ -206,7 +206,7 @@ def f_system_model():
     g = 9.81
     
     # Carga el archivo .mat
-    mat = scipy.io.loadmat('chi_uav_model.mat')
+    mat = scipy.io.loadmat('chi_uav_compact_full_model.mat')
 
     # Accede a la variable 'values_final'
     values_final = mat['values_final']
@@ -265,6 +265,30 @@ def f_system_model():
     # general vector X dot for implicit function
     xdot = vertcat(x1_dot, y1_dot, z1_dot,  phi_dot, theta_dot, psi_dot, dx1_dot, dy1_dot, dz1_dot, dphi_dot, dtheta_dot, dpsi_dot)
 
+    # Ref system as a external value
+
+    x1_d = MX.sym('x1_d')
+    y1_d = MX.sym('y1_d')
+    z1_d = MX.sym('z1_d')
+
+    phi_d = MX.sym('phi_d')
+    theta_d = MX.sym('theta_d')
+    psi_d = MX.sym('psi_d')
+
+    dx1_d = MX.sym('dx1_d')
+    dy1_d = MX.sym('dy1_d')
+    dz1_d = MX.sym('dz1_d')
+    dphi_d = MX.sym('dphi_d')
+    dtheta_d = MX.sym('dtheta_d')
+    dpsi_d = MX.sym('dpsi_d')
+
+    F_ref_d= MX.sym('ul_ref_d')
+    Taux_ref_d= MX.sym('um_ref_d')
+    Tauy_ref_d = MX.sym('un_ref_d')
+    Tauz_ref_d = MX.sym('w_ref_d')
+    
+    p = vertcat(x1_d, y1_d, z1_d, phi_d, theta_d, psi_d, dx1_d, dy1_d, dz1_d, dphi_d, dtheta_d, dpsi_d, F_ref_d,Taux_ref_d, Tauy_ref_d, Tauz_ref_d)
+
     # Rotational Matrix
     R = Rot_zyx(x)
     M_bar = M_matrix_bar(chi, x)
@@ -314,6 +338,7 @@ def f_system_model():
     model.xdot = xdot
     model.u = u
     model.name = model_name
+    model.p = p
 
     return model, f_system
 
@@ -383,6 +408,7 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
 
     model, f_system = f_system_model()
     ocp.model = model
+    ocp.p = model.p
     nx = model.x.size()[0]
     nu = model.u.size()[0]
     ny = nx + nu
@@ -390,32 +416,29 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
     # set dimensions
     ocp.dims.N = N_horizon
 
+    Q_mat = MX.zeros(6, 6)
+    Q_mat[0, 0] = 1
+    Q_mat[1, 1] = 1
+    Q_mat[2, 2] = 1
+    Q_mat[3, 3] = 0
+    Q_mat[4, 4] = 0
+    Q_mat[5, 5] = 1
+    
     # set cost
+    R_mat = MX.zeros(4, 4)
+    R_mat[0, 0] = 1.5*(1/0.3)
+    R_mat[1, 1] = 1.5*(1/0.3)
+    R_mat[2, 2] = 1.5*(1/0.3)
+    R_mat[3, 3] = 3*(1/2)
 
-        #                  hx hy hz phi theta psi vx  vy  vz  phi_p theta_p  psi_p  
-    Q_mat = 0.5 * np.diag([0, 0, 0,  0,   0,   0,  0.5,  0.5,  1,  0,     0,      1])  # [x,th,dx,dth]
-    R_mat = 1.5 * np.diag([1*(1/zp_max),  3*(1/phi_max), 3*(1/theta_max), (1/psi_p_max)])
+    ocp.parameter_values = np.zeros(ny)
 
-    ocp.cost.cost_type = "LINEAR_LS"
-    ocp.cost.cost_type_e = "LINEAR_LS"
+    ocp.cost.cost_type = "EXTERNAL"
+    ocp.cost.cost_type_e = "EXTERNAL"
 
-    ny = nx + nu
-    ny_e = nx
-
-    ocp.cost.W_e = Q_mat
-    ocp.cost.W = scipy.linalg.block_diag(Q_mat, R_mat)
-
-    ocp.cost.Vx = np.zeros((ny, nx))
-    ocp.cost.Vx[:nx, :nx] = np.eye(nx)
-
-    Vu = np.zeros((ny, nu))
-    Vu[nx : nx + nu, 0:nu] = np.eye(nu)
-    ocp.cost.Vu = Vu
-
-    ocp.cost.Vx_e = np.eye(nx)
-
-    ocp.cost.yref = np.zeros((ny,))
-    ocp.cost.yref_e = np.zeros((ny_e,))
+    error_pose = ocp.p[0:6] - model.x[0:6]
+    ocp.model.cost_expr_ext_cost = error_pose.T @ Q_mat @error_pose  + model.u.T @ R_mat @ model.u 
+    ocp.model.cost_expr_ext_cost_e = error_pose.T @ Q_mat @ error_pose
 
     # set constraints
     ocp.constraints.lbu = np.array([zp_min, phi_min, theta_min, psi_p_min])
@@ -428,9 +451,9 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon, zp_max, zp_min, phi_
 
     zmin=1.5
     zmax=50
-    ocp.constraints.lbx = np.array([zmin])
-    ocp.constraints.ubx = np.array([zmax])
-    ocp.constraints.idxbx = np.array([2])
+    #ocp.constraints.lbx = np.array([zmin])
+    #ocp.constraints.ubx = np.array([zmax])
+    #ocp.constraints.idxbx = np.array([2])
 
     # set options
     ocp.solver_options.qp_solver = "FULL_CONDENSING_HPIPM"  # FULL_CONDENSING_QPOASES
@@ -562,8 +585,10 @@ def main(vel_pub, vel_msg):
     frec= 30
     t_s = 1/frec
     # Prediction Time
-    N_horizont = 15
+    N_horizont = 30
     t_prediction = N_horizont/frec
+
+    
 
     # Nodes inside MPC
     N = np.arange(0, t_prediction + t_s, t_s)
@@ -586,7 +611,36 @@ def main(vel_pub, vel_msg):
     aux_yaw_d = np.zeros((1, t.shape[0]+1-N_prediction), dtype = np.double)
 
     # Read Values Odometry Drone
- 
+
+    #TAREA DESEADA
+    value = 18
+    xd = lambda t: 4 * np.sin(value*0.04*t) + 3
+    yd = lambda t: 4 * np.sin(value*0.08*t)
+    zd = lambda t: 2 * np.sin(value*0.08*t) + 6
+    xdp = lambda t: 4 * value * 0.04 * np.cos(value*0.04*t)
+    ydp = lambda t: 4 * value * 0.08 * np.cos(value*0.08*t)
+    zdp = lambda t: 2 * value * 0.08 * np.cos(value*0.08*t)
+
+    hxd = xd(t)
+    hyd = yd(t)
+    hzd = zd(t)
+    hxdp = xdp(t)
+    hydp = ydp(t)
+    hzdp = zdp(t)
+
+    psid = np.arctan2(hydp, hxdp)
+    psidp = np.gradient(psid, t_s)
+
+    # Reference Signal of the system
+    xref = np.zeros((16, t.shape[0]), dtype = np.double)
+    xref[0,:] = hxd 
+    xref[1,:] = hyd
+    xref[2,:] = hzd  
+    xref[3,:] = 0
+    xref[4,:] = 0
+    xref[5,:] = 0*psid  
+    xref[6,:] = 0 
+    xref[7,:] = 0 
    
 
     # Initial Control values
@@ -654,33 +708,6 @@ def main(vel_pub, vel_msg):
          # Reference Signal of the system
         
 
-        condicion = axes[5]
-        if condicion  == -4545.0:
-            xref[6,k:] = axes[0]
-            xref[7,k:] = axes[1]
-            xref[8,k:] = axes[3]
-            xref[11,k:] = axes[2]
-
-            
-            
-            #print(aux_angle) 
-            #print("RC:", " ".join("{:.2f}".format(value) for value in np.round(xref[6:11, k], decimals=2)), end='\r')
-
-        elif condicion == -10000.0:        
-            xref[6,k:] = hdp_vision[0]
-            xref[7,k:] = hdp_vision[1]
-            xref[8,k:] = hdp_vision[2]
-            xref[5,k:] = aux_yaw_d[:,k]
-            aux_yaw_d[:,k+1] = Angulo(hdp_vision[5] * t_s*0.5 + aux_yaw_d[:,k])
-            #print("Servo-Visual:", " ".join("{:.2f}".format(value) for value in np.round(xref[6:11, k], decimals=2)), end='\r')
-        
-        else:
-            
-            xref[6,k:] = 0.1
-            xref[7,k:] = 0.1
-            xref[8,k:] = 0.1
-            xref[11,k:] = 1
-            #print("HERE")
 
 
         
@@ -689,12 +716,15 @@ def main(vel_pub, vel_msg):
         acados_ocp_solver.set(0, "lbx", x[:,k])
         acados_ocp_solver.set(0, "ubx", x[:,k])
 
-        # update yref
+        # SET REFERENCES
         for j in range(N_prediction):
             yref = xref[:,k+j]
-            acados_ocp_solver.set(j, "yref", yref)
+            acados_ocp_solver.set(j, "p", yref)
+
         yref_N = xref[:,k+N_prediction]
-        acados_ocp_solver.set(N_prediction, "yref", yref_N[0:12])
+        acados_ocp_solver.set(N_prediction, "p", yref_N)
+
+        
 
         # Get Computational Time
         status = acados_ocp_solver.solve()
@@ -708,7 +738,7 @@ def main(vel_pub, vel_msg):
 
         # Get Control Signal
         u_control[:, k] = acados_ocp_solver.get(0, "u")
-        #u_control[3, k] = 0.7 * np.sin(0.5*t[k])
+        #u_control[:, k] = [0.0,-0.01,0.01,0]
                 
         # Send Control values
         send_velocity_control(u_control[:, k], vel_pub, vel_msg)
@@ -722,13 +752,19 @@ def main(vel_pub, vel_msg):
             print(f"{formatted_header}: {value:.2f}")
         print()
 
+
+        
         # System Evolution
-        #x_sim[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
-        #send_state_to_topic(x_sim[:, k+1])
-        
-        #Simula la odometria real
-        
-        x[:, k+1] = get_odometry_full()
+        opcion = "Sim"  # Valor que quieres evaluar
+
+        if opcion == "Real":
+            x[:, k+1] = get_odometry_simple()
+        elif opcion == "Sim":
+            x[:, k+1] = f_d(x[:, k], u_control[:, k], t_s, f)
+            
+            send_state_to_topic(x[:, k+1])
+        else:
+            print("Opción no válida")
 
           
         #aux_yaw_d[:,k+1] = (RK4_yaw(aux_yaw_d[:,k], t_s, f_yaw))
