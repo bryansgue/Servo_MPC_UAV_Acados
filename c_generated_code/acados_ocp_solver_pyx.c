@@ -748,7 +748,7 @@ static CYTHON_INLINE float __PYX_NAN() {
 #include <string.h>
 #include "acados/ocp_nlp/ocp_nlp_common.h"
 #include "acados_c/ocp_nlp_interface.h"
-#include "acados_solver_Drone_ode.h"
+#include "acados_solver_Drone_ode_complete.h"
 #include <stdio.h>
 #include "numpy/arrayobject.h"
 #include "numpy/ndarrayobject.h"
@@ -1367,7 +1367,7 @@ typedef npy_cdouble __pyx_t_5numpy_complex_t;
  */
 struct __pyx_obj_15acados_template_21acados_ocp_solver_pyx_AcadosOcpSolverCython {
   PyObject_HEAD
-  Drone_ode_solver_capsule *capsule;
+  Drone_ode_complete_solver_capsule *capsule;
   void *nlp_opts;
   ocp_nlp_dims *nlp_dims;
   ocp_nlp_config *nlp_config;
@@ -3466,7 +3466,7 @@ static int __pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpSolverC
  * 
  *         # create solver
  */
-  __pyx_v_self->capsule = Drone_ode_acados_create_capsule();
+  __pyx_v_self->capsule = Drone_ode_complete_acados_create_capsule();
 
   /* "acados_template/acados_ocp_solver_pyx.pyx":85
  * 
@@ -3477,7 +3477,7 @@ static int __pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpSolverC
  */
   #ifndef CYTHON_WITHOUT_ASSERTIONS
   if (unlikely(!Py_OptimizeFlag)) {
-    if (unlikely(!((Drone_ode_acados_create(__pyx_v_self->capsule) == 0) != 0))) {
+    if (unlikely(!((Drone_ode_complete_acados_create(__pyx_v_self->capsule) == 0) != 0))) {
       PyErr_SetNone(PyExc_AssertionError);
       __PYX_ERR(0, 85, __pyx_L1_error)
     }
@@ -3575,7 +3575,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  *         self.nlp_dims = acados_solver.acados_get_nlp_dims(self.capsule)
  *         self.nlp_config = acados_solver.acados_get_nlp_config(self.capsule)
  */
-  __pyx_v_self->nlp_opts = Drone_ode_acados_get_nlp_opts(__pyx_v_self->capsule);
+  __pyx_v_self->nlp_opts = Drone_ode_complete_acados_get_nlp_opts(__pyx_v_self->capsule);
 
   /* "acados_template/acados_ocp_solver_pyx.pyx":98
  *         # get pointers solver
@@ -3584,7 +3584,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  *         self.nlp_config = acados_solver.acados_get_nlp_config(self.capsule)
  *         self.nlp_out = acados_solver.acados_get_nlp_out(self.capsule)
  */
-  __pyx_v_self->nlp_dims = Drone_ode_acados_get_nlp_dims(__pyx_v_self->capsule);
+  __pyx_v_self->nlp_dims = Drone_ode_complete_acados_get_nlp_dims(__pyx_v_self->capsule);
 
   /* "acados_template/acados_ocp_solver_pyx.pyx":99
  *         self.nlp_opts = acados_solver.acados_get_nlp_opts(self.capsule)
@@ -3593,7 +3593,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  *         self.nlp_out = acados_solver.acados_get_nlp_out(self.capsule)
  *         self.sens_out = acados_solver.acados_get_sens_out(self.capsule)
  */
-  __pyx_v_self->nlp_config = Drone_ode_acados_get_nlp_config(__pyx_v_self->capsule);
+  __pyx_v_self->nlp_config = Drone_ode_complete_acados_get_nlp_config(__pyx_v_self->capsule);
 
   /* "acados_template/acados_ocp_solver_pyx.pyx":100
  *         self.nlp_dims = acados_solver.acados_get_nlp_dims(self.capsule)
@@ -3602,7 +3602,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  *         self.sens_out = acados_solver.acados_get_sens_out(self.capsule)
  *         self.nlp_in = acados_solver.acados_get_nlp_in(self.capsule)
  */
-  __pyx_v_self->nlp_out = Drone_ode_acados_get_nlp_out(__pyx_v_self->capsule);
+  __pyx_v_self->nlp_out = Drone_ode_complete_acados_get_nlp_out(__pyx_v_self->capsule);
 
   /* "acados_template/acados_ocp_solver_pyx.pyx":101
  *         self.nlp_config = acados_solver.acados_get_nlp_config(self.capsule)
@@ -3611,7 +3611,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  *         self.nlp_in = acados_solver.acados_get_nlp_in(self.capsule)
  *         self.nlp_solver = acados_solver.acados_get_nlp_solver(self.capsule)
  */
-  __pyx_v_self->sens_out = Drone_ode_acados_get_sens_out(__pyx_v_self->capsule);
+  __pyx_v_self->sens_out = Drone_ode_complete_acados_get_sens_out(__pyx_v_self->capsule);
 
   /* "acados_template/acados_ocp_solver_pyx.pyx":102
  *         self.nlp_out = acados_solver.acados_get_nlp_out(self.capsule)
@@ -3620,7 +3620,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  *         self.nlp_solver = acados_solver.acados_get_nlp_solver(self.capsule)
  * 
  */
-  __pyx_v_self->nlp_in = Drone_ode_acados_get_nlp_in(__pyx_v_self->capsule);
+  __pyx_v_self->nlp_in = Drone_ode_complete_acados_get_nlp_in(__pyx_v_self->capsule);
 
   /* "acados_template/acados_ocp_solver_pyx.pyx":103
  *         self.sens_out = acados_solver.acados_get_sens_out(self.capsule)
@@ -3629,7 +3629,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  * 
  * 
  */
-  __pyx_v_self->nlp_solver = Drone_ode_acados_get_nlp_solver(__pyx_v_self->capsule);
+  __pyx_v_self->nlp_solver = Drone_ode_complete_acados_get_nlp_solver(__pyx_v_self->capsule);
 
   /* "acados_template/acados_ocp_solver_pyx.pyx":92
  * 
@@ -3995,7 +3995,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  * 
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_1 = __Pyx_PyInt_From_int(Drone_ode_acados_solve(__pyx_v_self->capsule)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 128, __pyx_L1_error)
+  __pyx_t_1 = __Pyx_PyInt_From_int(Drone_ode_complete_acados_solve(__pyx_v_self->capsule)); if (unlikely(!__pyx_t_1)) __PYX_ERR(0, 128, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_1);
   __pyx_r = __pyx_t_1;
   __pyx_t_1 = 0;
@@ -4107,7 +4107,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  */
   __Pyx_XDECREF(__pyx_r);
   __pyx_t_1 = __Pyx_PyInt_As_int(__pyx_v_reset_qp_solver_mem); if (unlikely((__pyx_t_1 == (int)-1) && PyErr_Occurred())) __PYX_ERR(0, 135, __pyx_L1_error)
-  __pyx_t_2 = __Pyx_PyInt_From_int(Drone_ode_acados_reset(__pyx_v_self->capsule, __pyx_t_1)); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 135, __pyx_L1_error)
+  __pyx_t_2 = __Pyx_PyInt_From_int(Drone_ode_complete_acados_reset(__pyx_v_self->capsule, __pyx_t_1)); if (unlikely(!__pyx_t_2)) __PYX_ERR(0, 135, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_2);
   __pyx_r = __pyx_t_2;
   __pyx_t_2 = 0;
@@ -4240,7 +4240,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  * 
  */
   __Pyx_XDECREF(__pyx_r);
-  __pyx_t_6 = __Pyx_PyInt_From_int(Drone_ode_acados_custom_update(__pyx_v_self->capsule, ((double *)__pyx_v_data->data), __pyx_v_data_len)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 148, __pyx_L1_error)
+  __pyx_t_6 = __Pyx_PyInt_From_int(Drone_ode_complete_acados_custom_update(__pyx_v_self->capsule, ((double *)__pyx_v_data->data), __pyx_v_data_len)); if (unlikely(!__pyx_t_6)) __PYX_ERR(0, 148, __pyx_L1_error)
   __Pyx_GOTREF(__pyx_t_6);
   __pyx_r = __pyx_t_6;
   __pyx_t_6 = 0;
@@ -5288,7 +5288,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  * 
  * 
  */
-  Drone_ode_acados_print_stats(__pyx_v_self->capsule);
+  Drone_ode_complete_acados_print_stats(__pyx_v_self->capsule);
 
   /* "acados_template/acados_ocp_solver_pyx.pyx":304
  * 
@@ -9300,7 +9300,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  */
     #ifndef CYTHON_WITHOUT_ASSERTIONS
     if (unlikely(!Py_OptimizeFlag)) {
-      if (unlikely(!((Drone_ode_acados_update_params(__pyx_v_self->capsule, __pyx_v_stage, ((double *)__pyx_v_value->data), (__pyx_v_value->dimensions[0])) == 0) != 0))) {
+      if (unlikely(!((Drone_ode_complete_acados_update_params(__pyx_v_self->capsule, __pyx_v_stage, ((double *)__pyx_v_value->data), (__pyx_v_value->dimensions[0])) == 0) != 0))) {
         PyErr_SetNone(PyExc_AssertionError);
         __PYX_ERR(0, 559, __pyx_L1_error)
       }
@@ -12376,7 +12376,7 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  */
   #ifndef CYTHON_WITHOUT_ASSERTIONS
   if (unlikely(!Py_OptimizeFlag)) {
-    if (unlikely(!((Drone_ode_acados_update_params_sparse(__pyx_v_self->capsule, __pyx_v_stage, ((int *)__pyx_v_idx->data), ((double *)__pyx_v_value->data), __pyx_v_n_update) == 0) != 0))) {
+    if (unlikely(!((Drone_ode_complete_acados_update_params_sparse(__pyx_v_self->capsule, __pyx_v_stage, ((int *)__pyx_v_idx->data), ((double *)__pyx_v_value->data), __pyx_v_n_update) == 0) != 0))) {
       PyErr_SetNone(PyExc_AssertionError);
       __PYX_ERR(0, 791, __pyx_L1_error)
     }
@@ -12473,14 +12473,14 @@ static PyObject *__pyx_pf_15acados_template_21acados_ocp_solver_pyx_21AcadosOcpS
  *             acados_solver.acados_free(self.capsule)             # <<<<<<<<<<<<<<
  *             acados_solver.acados_free_capsule(self.capsule)
  */
-    (void)(Drone_ode_acados_free(__pyx_v_self->capsule));
+    (void)(Drone_ode_complete_acados_free(__pyx_v_self->capsule));
 
     /* "acados_template/acados_ocp_solver_pyx.pyx":798
  *         if self.solver_created:
  *             acados_solver.acados_free(self.capsule)
  *             acados_solver.acados_free_capsule(self.capsule)             # <<<<<<<<<<<<<<
  */
-    (void)(Drone_ode_acados_free_capsule(__pyx_v_self->capsule));
+    (void)(Drone_ode_complete_acados_free_capsule(__pyx_v_self->capsule));
 
     /* "acados_template/acados_ocp_solver_pyx.pyx":796
  * 
