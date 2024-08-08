@@ -16,7 +16,9 @@ from casadi import norm_2
 from casadi import cross
 from casadi import if_else
 from casadi import atan2
-from fancy_plots import fancy_plots_2, fancy_plots_1
+
+from casadi import jacobian
+from casadi import sqrt
 import rospy
 from scipy.spatial.transform import Rotation as R
 from nav_msgs.msg import Odometry
@@ -26,6 +28,9 @@ import math
 import scipy.io
 from std_msgs.msg import Float64MultiArray
 from geometry_msgs.msg import TwistStamped
+
+# CARGA FUNCIONES DEL PROGRAMA
+from graficas import plot_pose, plot_error, plot_time, plot_control
 
 #from c_generated_code.acados_ocp_solver_pyx import AcadosOcpSolverCython
 
@@ -282,7 +287,7 @@ def f_system_model():
 
     q_p = quat_p(quat, w)  
 
-    print(I)
+    
 
     w_p = inv(I) @ (u2 - cross(w, I @ w))
 
@@ -292,6 +297,10 @@ def f_system_model():
         q_p,
         w_p
     )
+
+    # Define f_x and g_x
+    f_x = Function('f_x', [x], [f_expl])
+    g_x = Function('g_x', [x, u], [jacobian(f_expl, u)])
 
     f_system = Function('system',[x, u], [f_expl])
      # Acados Model
@@ -308,7 +317,8 @@ def f_system_model():
     model.name = model_name
     model.p = p
 
-    return model, f_system
+    return model, f_system, f_x, g_x
+
 
 def f_d(x, u, ts, f_sys):
     k1 = f_sys(x, u)
@@ -390,7 +400,7 @@ def log_cuaternion_casadi(q):
     # Calcular la norma de la parte vectorial usando CasADi
     norm_q_v = norm_2(q_v)
 
-    print(norm_q_v)
+    #print(norm_q_v)
     
     # Calcular el ángulo theta
     theta = atan2(norm_q_v, q_w)
@@ -403,7 +413,7 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon) -> AcadosOcp:
     # create ocp object to formulate the OCP
     ocp = AcadosOcp()
 
-    model, f_system = f_system_model()
+    model, f_system, f_x, g_x = f_system_model()
     ocp.model = model
     ocp.p = model.p
     nx = model.x.size()[0]
@@ -426,10 +436,10 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon) -> AcadosOcp:
     
     # Matriz de ganancia Acciones de contol
     R_mat = MX.zeros(4, 4)
-    R_mat[0, 0] = 0.01
-    R_mat[1, 1] = 0.01
-    R_mat[2, 2] = 0.01
-    R_mat[3, 3] = 0.01
+    R_mat[0, 0] = 0.001
+    R_mat[1, 1] = 200
+    R_mat[2, 2] = 200
+    R_mat[3, 3] = 200
 
     ocp.parameter_values = np.zeros(ny)
 
@@ -444,8 +454,58 @@ def create_ocp_solver_description(x0, N_horizon, t_horizon) -> AcadosOcp:
     ocp.model.cost_expr_ext_cost = error_pose.T @ Q_mat @error_pose  + model.u.T @ R_mat @ model.u + log_q.T @ K_mat @ log_q
     ocp.model.cost_expr_ext_cost_e = error_pose.T @ Q_mat @ error_pose +  log_q.T @  K_mat @ log_q
 
+   
+    obs_x = 2.9     # Posicion donde actualiza la posicion del obstaculo
+    obs_y = 0.17
+    obs_r = 0.4
+    rob_r = 0.4
+    B = -sqrt((model.x[0] - obs_x)**2 + (model.x[1] - obs_y)**2) + (rob_r + obs_r)  
+    delta_B =  jacobian(B, model.x) 
+
+    
+
+    #print(delta_B.size())
+    #print(f_x.size_out(0))
+    #print(g_x.size_out(0))
+
+    f_x_val = f_x(model.x)
+    g_x_val = g_x(model.x,model.u)
+    u = model.u
+   
+    B_p = delta_B@f_x_val + delta_B@g_x_val@u
+
+    time.sleep(5)
+
     # set constraints
-    Tmax = 10*9.81
+    ocp.constraints.constr_type = 'BGH'
+
+
+    constraints = vertcat(B_p + 0.8*B)
+    #constraints = vertcat(B_p + 1*B)
+    #constraints = vertcat(model.x[1])
+    
+    ocp.model.con_h_expr = constraints
+    Dim_constraints = 1
+    #ocp.model.con_h_expr_e =  ocp.model.con_h_expr
+
+
+    # We put all constraint cost weights to 0 and only set them at runtime
+    cost_weights = np.ones(Dim_constraints)
+    ocp.cost.zl = cost_weights
+    ocp.cost.Zl = 1e2 *cost_weights
+    ocp.cost.Zu = 1e2* cost_weights
+    ocp.cost.zu = cost_weights
+
+    ocp.constraints.lh =-1e9* np.ones(Dim_constraints)  #min
+    #ocp.constraints.lh_e = -1e9* np.ones(Dim_constraints)
+    ocp.constraints.uh = 0.0*np.ones(Dim_constraints) #max
+    #ocp.constraints.uh_e = np.zeros(Dim_constraints)
+    ocp.constraints.idxsh = np.arange(Dim_constraints)
+
+  
+
+    # set constraints
+    Tmax = 3*9.81
     taux_max = 0.02
     tauy_max = 0.02
     tauz_max = 0.02
@@ -640,7 +700,7 @@ def publish_matrix(matrix_data, topic_name='/nombre_del_topico'):
 def main(vel_pub, vel_msg):
     # Initial Values System
     # Simulation Time
-    t_final = 60*10
+    t_final = 30
     # Sample time
     frec= 30
     t_s = 1/frec
@@ -670,7 +730,7 @@ def main(vel_pub, vel_msg):
     
     
     #TAREA DESEADA
-    value = 10
+    value = 6
     xd = lambda t: 4 * np.sin(value*0.04*t) + 3
     yd = lambda t: 4 * np.sin(value*0.08*t)
     zd = lambda t: 2 * np.sin(value*0.08*t) + 6
@@ -732,7 +792,7 @@ def main(vel_pub, vel_msg):
     psi_p_ref_min = -psi_p_ref_max
 
     # Create Optimal problem
-    model, f = f_system_model()
+    model, f, f_x, f_g = f_system_model()
 
     ocp = create_ocp_solver_description(x[:,0], N_prediction, t_prediction)
     #acados_ocp_solver = AcadosOcpSolver(ocp, json_file="acados_ocp_" + ocp.model.name + ".json", build= True, generate= True)
@@ -772,6 +832,8 @@ def main(vel_pub, vel_msg):
     print("Ready!!!")
        
     
+    
+
     for k in range(0, t.shape[0]-N_prediction):
         tic = time.time()
 
@@ -794,6 +856,9 @@ def main(vel_pub, vel_msg):
         simX[:,N_prediction] = acados_ocp_solver.get(N_prediction, "x")
 
         publish_matrix(simX[0:3, 0:N_prediction], '/Prediction')
+        publish_matrix(xref[0:3, 0:1000:10], '/task_desired')
+
+        
 
         #print(simX[:,10])
 
@@ -841,83 +906,12 @@ def main(vel_pub, vel_msg):
     
     send_velocity_control([0, 0, 0, 0], vel_pub, vel_msg)
 
+    fig1 = plot_pose(x, xref, t)
+    fig1.savefig("1_pose.png")
+    fig2 = plot_control(u_control, t)
+    fig2.savefig("2_control_actions.png")
 
-
-    # fig1, ax11 = fancy_plots_1()
-    # states_x, = ax11.plot(t[0:x.shape[1]], x[9,:],
-    #                 color='#BB5651', lw=1, ls="-")
-    # states_y, = ax11.plot(t[0:x.shape[1]], x[10,:],
-    #                 color='#69BB51', lw=1, ls="-")
-    # states_z, = ax11.plot(t[0:x.shape[1]], x[11,:],
-    #                 color='#5189BB', lw=1, ls="-")
-    # states_xd, = ax11.plot(t[0:x.shape[1]], xref[9,0:x.shape[1]],
-    #                 color='#BB5651', lw=2, ls="--")
-    # states_yd, = ax11.plot(t[0:x.shape[1]], xref[10,0:x.shape[1]],
-    #                 color='#69BB51', lw=2, ls="--")
-    # states_zd, = ax11.plot(t[0:x.shape[1]], xref[11,0:x.shape[1]],
-    #                 color='#5189BB', lw=2, ls="--")
-
-    # ax11.set_ylabel(r"$[states]$", rotation='vertical')
-    # ax11.set_xlabel(r"$[t]$", labelpad=5)
-    # ax11.legend([states_x, states_y, states_z, states_xd, states_yd, states_zd],
-    #         [r'$p$', r'$q$', r'$r$', r'$p_d$', r'$q_d$', r'$r_d$'],
-    #         loc="best",
-    #         frameon=True, fancybox=True, shadow=False, ncol=2,
-    #         borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
-    #         borderaxespad=0.3, columnspacing=2)
-    # ax11.grid(color='#949494', linestyle='-.', linewidth=0.5)
-
-    # fig1.savefig("states_xyz.eps")
-    # fig1.savefig("states_xyz.png")
-    # fig1
-    # #plt.show()
-
-    # fig2, ax12 = fancy_plots_1()
-    # states_phi, = ax12.plot(t[0:x.shape[1]], x[3,:],
-    #                 color='#BB5651', lw=2, ls="-")
-    # states_theta, = ax12.plot(t[0:x.shape[1]], x[4,:],
-    #                 color='#69BB51', lw=2, ls="-")
-    # states_psi, = ax12.plot(t[0:x.shape[1]], x[5,:],
-    #                 color='#5189BB', lw=2, ls="-")
-
-    # ax12.set_ylabel(r"$[states]$", rotation='vertical')
-    # ax12.set_xlabel(r"$[t]$", labelpad=5)
-    # ax12.legend([states_phi, states_theta, states_psi],
-    #         [r'$\phi$', r'$\theta$', r'$\psi$'],
-    #         loc="best",
-    #         frameon=True, fancybox=True, shadow=False, ncol=2,
-    #         borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
-    #         borderaxespad=0.3, columnspacing=2)
-    # ax12.grid(color='#949494', linestyle='-.', linewidth=0.5)
-
-    # fig2.savefig("states_angles.eps")
-    # fig2.savefig("states_angles.png")
-    # fig2
-    # #plt.show()
-
-    # fig3, ax13 = fancy_plots_1()
-    # ## Axis definition necesary to fancy plots
-    # ax13.set_xlim((t[0], t[-1]))
-
-    # time_1, = ax13.plot(t[0:delta_t.shape[1]],delta_t[0,:],
-    #                 color='#00429d', lw=2, ls="-")
-    # tsam1, = ax13.plot(t[0:t_sample.shape[1]],t_sample[0,:],
-    #                 color='#9e4941', lw=2, ls="-.")
-
-    # ax13.set_ylabel(r"$[s]$", rotation='vertical')
-    # ax13.set_xlabel(r"$\textrm{Time}[s]$", labelpad=5)
-    # ax13.legend([time_1,tsam1],
-    #         [r'$t_{compute}$',r'$t_{sample}$'],
-    #         loc="best",
-    #         frameon=True, fancybox=True, shadow=False, ncol=2,
-    #         borderpad=0.5, labelspacing=0.5, handlelength=3, handletextpad=0.1,
-    #         borderaxespad=0.3, columnspacing=2)
-    # ax13.grid(color='#949494', linestyle='-.', linewidth=0.5)
-
-    # fig3.savefig("time.eps")
-    # fig3.savefig("time.png")
-    # fig3
-    # #plt.show()
+    
 
     print(f'Mean iteration time with MLP Model: {1000*np.mean(delta_t):.1f}ms -- {1/np.mean(delta_t):.0f}Hz)')
 

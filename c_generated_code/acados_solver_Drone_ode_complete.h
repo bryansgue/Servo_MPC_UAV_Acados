@@ -48,14 +48,14 @@
 #define DRONE_ODE_COMPLETE_NBU    4
 #define DRONE_ODE_COMPLETE_NSBX   0
 #define DRONE_ODE_COMPLETE_NSBU   0
-#define DRONE_ODE_COMPLETE_NSH    0
+#define DRONE_ODE_COMPLETE_NSH    1
 #define DRONE_ODE_COMPLETE_NSG    0
 #define DRONE_ODE_COMPLETE_NSPHI  0
 #define DRONE_ODE_COMPLETE_NSHN   0
 #define DRONE_ODE_COMPLETE_NSGN   0
 #define DRONE_ODE_COMPLETE_NSPHIN 0
 #define DRONE_ODE_COMPLETE_NSBXN  0
-#define DRONE_ODE_COMPLETE_NS     0
+#define DRONE_ODE_COMPLETE_NS     1
 #define DRONE_ODE_COMPLETE_NSN    0
 #define DRONE_ODE_COMPLETE_NG     0
 #define DRONE_ODE_COMPLETE_NBXN   0
@@ -64,7 +64,7 @@
 #define DRONE_ODE_COMPLETE_NY     0
 #define DRONE_ODE_COMPLETE_NYN    0
 #define DRONE_ODE_COMPLETE_N      32
-#define DRONE_ODE_COMPLETE_NH     0
+#define DRONE_ODE_COMPLETE_NH     1
 #define DRONE_ODE_COMPLETE_NPHI   0
 #define DRONE_ODE_COMPLETE_NHN    0
 #define DRONE_ODE_COMPLETE_NPHIN  0
@@ -118,6 +118,8 @@ typedef struct Drone_ode_complete_solver_capsule
     external_function_param_casadi ext_cost_e_fun_jac_hess;
 
     // constraints
+    external_function_param_casadi *nl_constr_h_fun_jac;
+    external_function_param_casadi *nl_constr_h_fun;
 
 
 
